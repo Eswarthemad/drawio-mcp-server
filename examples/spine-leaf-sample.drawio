@@ -1,0 +1,101 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile version="24.0.0">
+  <diagram name="Spine-Leaf Fabric" id="page1">
+    <mxGraphModel dx="1034" dy="546" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="986031e5" value="spine01" style="shape=mxgraph.cisco.switches.layer_3_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;spine01&quot;, &quot;role&quot;: &quot;spine&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 0, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="494" y="80" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="da502e89" value="spine02" style="shape=mxgraph.cisco.switches.layer_3_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;spine02&quot;, &quot;role&quot;: &quot;spine&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 0, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="632" y="80" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="1aacd457" value="leaf01" style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#0e7ad1;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;leaf01&quot;, &quot;role&quot;: &quot;leaf&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 2, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="356" y="280" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="31510cba" value="leaf02" style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#0e7ad1;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;leaf02&quot;, &quot;role&quot;: &quot;leaf&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 2, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="494" y="280" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="7a42f770" value="leaf03" style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#0e7ad1;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;leaf03&quot;, &quot;role&quot;: &quot;leaf&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 2, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="632" y="280" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="24ecc685" value="leaf04" style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#0e7ad1;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;leaf04&quot;, &quot;role&quot;: &quot;leaf&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 2, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="770" y="280" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="fe6849b8" value="compute01" style="shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;compute01&quot;, &quot;role&quot;: &quot;compute_node&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 3, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="80" y="480" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="0b8f5de5" value="compute02" style="shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;compute02&quot;, &quot;role&quot;: &quot;compute_node&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 3, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="218" y="480" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="d42a24e7" value="compute03" style="shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;compute03&quot;, &quot;role&quot;: &quot;compute_node&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 3, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="356" y="480" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="6a7ff903" value="compute04" style="shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;compute04&quot;, &quot;role&quot;: &quot;compute_node&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 3, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="494" y="480" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="259dfce2" value="compute05" style="shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;compute05&quot;, &quot;role&quot;: &quot;compute_node&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 3, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="632" y="480" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="d2344422" value="compute06" style="shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;compute06&quot;, &quot;role&quot;: &quot;compute_node&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 3, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="770" y="480" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="ccd46f6a" value="compute07" style="shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;compute07&quot;, &quot;role&quot;: &quot;compute_node&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 3, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="908" y="480" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="fe20fa84" value="compute08" style="shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" tooltip="{&quot;hostname&quot;: &quot;compute08&quot;, &quot;role&quot;: &quot;compute_node&quot;, &quot;vendor&quot;: &quot;NVIDIA&quot;, &quot;platform&quot;: &quot;H200&quot;, &quot;layer&quot;: 3, &quot;site&quot;: &quot;DC1&quot;, &quot;zone&quot;: &quot;&quot;, &quot;redundancy_group&quot;: &quot;&quot;}" vertex="1" parent="1">
+          <mxGeometry x="1046" y="480" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="6d0a95a9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;" edge="1" source="986031e5" target="1aacd457" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="9a058492" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;" edge="1" source="986031e5" target="31510cba" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="5861b735" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;" edge="1" source="986031e5" target="7a42f770" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="34299f0d" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;" edge="1" source="986031e5" target="24ecc685" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="1ac368aa" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;" edge="1" source="da502e89" target="1aacd457" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b710de0c" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;" edge="1" source="da502e89" target="31510cba" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="1cc9c2e4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;" edge="1" source="da502e89" target="7a42f770" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a3e414f6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;" edge="1" source="da502e89" target="24ecc685" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="35bc17c3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;" edge="1" source="1aacd457" target="fe6849b8" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9509fc9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;" edge="1" source="1aacd457" target="0b8f5de5" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="6050672e" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;" edge="1" source="31510cba" target="d42a24e7" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="85e63c4c" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;" edge="1" source="31510cba" target="6a7ff903" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="191f5814" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;" edge="1" source="7a42f770" target="259dfce2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="280478c0" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;" edge="1" source="7a42f770" target="d2344422" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ba420b84" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;" edge="1" source="24ecc685" target="ccd46f6a" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a655e8f0" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;" edge="1" source="24ecc685" target="fe20fa84" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

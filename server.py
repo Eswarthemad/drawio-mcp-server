@@ -288,6 +288,165 @@ def auto_layout(
 
 
 # ==============================================================================
+# TOOL 11 — add_device
+# ==============================================================================
+
+@mcp.tool()
+def add_device(
+    path: str,
+    hostname: str,
+    role: str,
+    vendor: str = "",
+    platform: str = "",
+    site: str = "",
+    zone: str = "",
+    redundancy_group: str = "",
+    x: int = 100,
+    y: int = 100,
+    width: int = 78,
+    height: int = 78,
+    style: str | None = None,
+) -> str:
+    """
+    Add a network device node to a draw.io diagram.
+
+    The device carries structured metadata (hostname, role, vendor,
+    platform, layer, site, zone, redundancy_group) stored in the
+    draw.io tooltip field so it survives file round-trips.
+
+    Valid roles:
+        spine, core_switch, router,
+        firewall, load_balancer,
+        border_leaf, leaf,
+        gpu_node, storage_node, compute_node,
+        management_switch, monitoring_node
+
+    Args:
+        path:             Full path to the .drawio file.
+        hostname:         Device hostname (cell label).
+        role:             Device role (see valid roles above).
+        vendor:           Vendor name (e.g. 'NVIDIA', 'Fortinet').
+        platform:         Platform / model string.
+        site:             Site identifier (e.g. 'DC1').
+        zone:             Security or network zone.
+        redundancy_group: HA / MLAG / ECMP group identifier.
+        x, y:             Canvas position in pixels.
+        width, height:    Node dimensions in pixels.
+        style:            Explicit draw.io style (uses role default if omitted).
+
+    Returns:
+        The new cell's ID on success, or an error message.
+    """
+    return drawio.add_device(
+        path, hostname, role, vendor, platform,
+        site, zone, redundancy_group, x, y, width, height, style,
+    )
+
+
+# ==============================================================================
+# TOOL 12 — add_link
+# ==============================================================================
+
+@mcp.tool()
+def add_link(
+    path: str,
+    source_id: str,
+    target_id: str,
+    link_type: str = "default",
+    label: str = "",
+) -> str:
+    """
+    Add a typed network link (edge) between two device nodes.
+
+    Link type controls the visual style of the connection:
+        fabric      — spine↔leaf interconnect (thick blue)
+        uplink      — leaf↔compute access uplinks
+        management  — out-of-band management (dashed amber)
+        default     — generic link
+
+    Args:
+        path:      Full path to the .drawio file.
+        source_id: Cell ID of the source device.
+        target_id: Cell ID of the target device.
+        link_type: Logical link type (see above).
+        label:     Optional label shown on the link.
+
+    Returns:
+        The new edge's ID on success, or an error message.
+    """
+    return drawio.add_link(path, source_id, target_id, link_type, label)
+
+
+# ==============================================================================
+# TOOL 13 — build_spine_leaf_fabric
+# ==============================================================================
+
+@mcp.tool()
+def build_spine_leaf_fabric(
+    path: str,
+    spine_count: int = 2,
+    leaf_count: int = 4,
+    compute_per_leaf: int = 2,
+    spine_names: list[str] | None = None,
+    leaf_names: list[str] | None = None,
+    compute_names: list[str] | None = None,
+    site: str = "DC1",
+    vendor: str = "generic",
+    platform: str = "",
+    node_width: int = 78,
+    node_height: int = 78,
+    layer_spacing: int = 200,
+    node_spacing: int = 60,
+    start_x: int = 80,
+    start_y: int = 80,
+) -> str:
+    """
+    Build a complete spine-leaf fabric topology diagram in one call.
+
+    Layout (top-to-bottom grid):
+        Row 0  — Spine switches
+        Row 1  — Leaf switches
+        Row 2  — Compute / GPU nodes
+
+    Connectivity:
+        Every spine ↔ every leaf  (full-mesh fabric links)
+        Every leaf  ↔ its compute nodes  (uplinks)
+
+    The file is created blank if it does not already exist.
+
+    Args:
+        path:             Full path to write the .drawio file.
+        spine_count:      Number of spine switches (default 2).
+        leaf_count:       Number of leaf switches  (default 4).
+        compute_per_leaf: Compute nodes per leaf   (default 2).
+        spine_names:      Optional list of spine hostnames.
+        leaf_names:       Optional list of leaf hostnames.
+        compute_names:    Optional list of compute hostnames
+                          (must equal leaf_count × compute_per_leaf).
+        site:             Site label for all device metadata.
+        vendor:           Vendor string for all devices.
+        platform:         Platform string for all devices.
+        node_width:       Node width in pixels  (default 78).
+        node_height:      Node height in pixels (default 78).
+        layer_spacing:    Vertical gap between rows (default 200).
+        node_spacing:     Horizontal gap between sibling nodes (default 60).
+        start_x:          Left canvas margin (default 80).
+        start_y:          Top canvas margin  (default 80).
+
+    Returns:
+        JSON summary with node counts, link counts, and all cell IDs.
+    """
+    return drawio.build_spine_leaf_fabric(
+        path, spine_count, leaf_count, compute_per_leaf,
+        spine_names, leaf_names, compute_names,
+        site, vendor, platform,
+        node_width, node_height,
+        layer_spacing, node_spacing,
+        start_x, start_y,
+    )
+
+
+# ==============================================================================
 # ENTRY POINT
 # ==============================================================================
 

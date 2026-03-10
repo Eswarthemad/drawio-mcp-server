@@ -36,6 +36,64 @@ from pathlib import Path
 
 
 # ==============================================================================
+# DEVICE ROLE DEFINITIONS
+# ==============================================================================
+
+#: Maps a device role name to its canonical diagram layer (int) or
+#: the string "sidebar" for management / monitoring nodes that are
+#: placed in a dedicated column outside the main grid.
+ROLE_LAYER: dict[str, int | str] = {
+    # Core fabric
+    "spine":              0,
+    "core_switch":        0,
+    "router":             0,
+    # Perimeter / security (placed in a separate left column at layer 0 height)
+    "firewall":           0,
+    "load_balancer":      1,
+    # Aggregation / distribution
+    "border_leaf":        1,
+    # Access / ToR
+    "leaf":               2,
+    # Compute / workload
+    "gpu_node":           3,
+    "storage_node":       3,
+    "compute_node":       3,
+    # Out-of-band (sidebar column, not in main grid)
+    "management_switch":  "sidebar",
+    "monitoring_node":    "sidebar",
+}
+
+#: Role → draw.io style string.
+#: Phase 3 will replace these with proper style profiles; for now each
+#: role has a minimal distinctive style that makes diagrams readable.
+ROLE_STYLE: dict[str, str] = {
+    "spine":              "shape=mxgraph.cisco.switches.layer_3_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "core_switch":        "shape=mxgraph.cisco.switches.layer_3_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "router":             "shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "firewall":           "shape=mxgraph.cisco.firewalls.firewall;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#ae4132;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "load_balancer":      "rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;",
+    "border_leaf":        "shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#0e7ad1;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "leaf":               "shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#0e7ad1;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "gpu_node":           "shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "storage_node":       "shape=mxgraph.cisco.storage.generic_disk_array;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "compute_node":       "shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "management_switch":  "shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#f0a30a;strokeColor=#BD7000;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "monitoring_node":    "rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;",
+}
+
+#: Default style used when a role has no explicit entry in ROLE_STYLE.
+DEFAULT_STYLE: str = "rounded=1;whiteSpace=wrap;html=1;"
+
+#: Link styles keyed by a logical link type name.
+LINK_STYLE: dict[str, str] = {
+    "fabric":     "edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;",
+    "uplink":     "edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;",
+    "management": "edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#d6b656;dashed=1;",
+    "default":    "edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;",
+}
+
+
+# ==============================================================================
 # FILE I/O
 # ==============================================================================
 
@@ -554,6 +612,329 @@ def apply_layout(
 
         save_diagram(tree, path)
         return f"Auto-layout applied: direction={direction}, layers={len(layers)}, nodes={len(vertices)}"
+
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
+# ==============================================================================
+# PHASE 2 — NETWORK-AWARE DEVICE & LINK PRIMITIVES
+# ==============================================================================
+
+def add_device(
+    path: str,
+    hostname: str,
+    role: str,
+    vendor: str = "",
+    platform: str = "",
+    site: str = "",
+    zone: str = "",
+    redundancy_group: str = "",
+    x: int = 100,
+    y: int = 100,
+    width: int = 78,
+    height: int = 78,
+    style: str | None = None,
+) -> str:
+    """
+    Add a network device node to the diagram.
+
+    The device carries structured metadata stored as a JSON string in the
+    draw.io ``tooltip`` attribute so that it survives file round-trips and
+    is visible in the draw.io UI on hover.
+
+    The ``layer`` field in the metadata is derived automatically from
+    ``ROLE_LAYER[role]`` and is stored for reference by layout functions.
+
+    If ``style`` is not supplied the role's default style from
+    ``ROLE_STYLE`` is used, falling back to ``DEFAULT_STYLE``.
+
+    Args:
+        path:             Full path to the .drawio file.
+        hostname:         Device hostname (used as the cell label).
+        role:             Device role key — must be a key in ROLE_LAYER.
+                          E.g. 'spine', 'leaf', 'firewall', 'gpu_node'.
+        vendor:           Vendor name (e.g. 'NVIDIA', 'Fortinet', 'Cumulus').
+        platform:         Platform / model (e.g. 'H200', 'FortiGate-4201F').
+        site:             Site identifier (e.g. 'DC1', 'DC2').
+        zone:             Security or network zone (e.g. 'DMZ', 'PROD').
+        redundancy_group: HA / MLAG / ECMP group identifier.
+        x:                X position in pixels.
+        y:                Y position in pixels.
+        width:            Node width in pixels (default 78 for icon shapes).
+        height:           Node height in pixels (default 78 for icon shapes).
+        style:            Explicit draw.io style string. If omitted the
+                          role default from ROLE_STYLE is used.
+
+    Returns:
+        The new cell's ID on success, or an error message prefixed 'ERROR:'.
+    """
+    if role not in ROLE_LAYER:
+        known = ", ".join(sorted(ROLE_LAYER.keys()))
+        return f"ERROR: Unknown role '{role}'. Known roles: {known}"
+
+    resolved_style = style or ROLE_STYLE.get(role, DEFAULT_STYLE)
+    layer          = ROLE_LAYER[role]
+
+    metadata = {
+        "hostname":         hostname,
+        "role":             role,
+        "vendor":           vendor,
+        "platform":         platform,
+        "layer":            layer,
+        "site":             site,
+        "zone":             zone,
+        "redundancy_group": redundancy_group,
+    }
+
+    try:
+        tree    = load_diagram(path)
+        root_el = get_root_cell(tree)
+        new_id  = next_id(root_el)
+
+        cell = ET.SubElement(root_el, "mxCell")
+        cell.set("id",      new_id)
+        cell.set("value",   hostname)
+        cell.set("style",   resolved_style)
+        cell.set("tooltip", json.dumps(metadata))
+        cell.set("vertex",  "1")
+        cell.set("parent",  "1")
+
+        geo = ET.SubElement(cell, "mxGeometry")
+        geo.set("x",      str(x))
+        geo.set("y",      str(y))
+        geo.set("width",  str(width))
+        geo.set("height", str(height))
+        geo.set("as",     "geometry")
+
+        save_diagram(tree, path)
+        return new_id
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
+def add_link(
+    path: str,
+    source_id: str,
+    target_id: str,
+    link_type: str = "default",
+    label: str = "",
+) -> str:
+    """
+    Add a network link (edge) between two device nodes.
+
+    The visual style is resolved from ``LINK_STYLE[link_type]``.
+    Unknown link types fall back to ``LINK_STYLE['default']``.
+
+    Supported link types:
+        fabric      — spine↔leaf interconnect (thick blue)
+        uplink      — leaf↔compute / access uplinks
+        management  — out-of-band management connections (dashed amber)
+        default     — generic link
+
+    Args:
+        path:      Full path to the .drawio file.
+        source_id: Cell ID of the source device.
+        target_id: Cell ID of the target device.
+        link_type: Logical link type key (see above).
+        label:     Optional label shown on the link.
+
+    Returns:
+        The new edge's ID on success, or an error message prefixed 'ERROR:'.
+    """
+    resolved_style = LINK_STYLE.get(link_type, LINK_STYLE["default"])
+    return insert_edge(path, source_id, target_id, label, resolved_style)
+
+
+# ==============================================================================
+# PHASE 2 — TOPOLOGY BUILDER: SPINE-LEAF FABRIC
+# ==============================================================================
+
+def build_spine_leaf_fabric(
+    path: str,
+    spine_count: int = 2,
+    leaf_count: int = 4,
+    compute_per_leaf: int = 2,
+    spine_names: list[str] | None = None,
+    leaf_names: list[str] | None = None,
+    compute_names: list[str] | None = None,
+    site: str = "DC1",
+    vendor: str = "generic",
+    platform: str = "",
+    node_width: int = 78,
+    node_height: int = 78,
+    layer_spacing: int = 200,
+    node_spacing: int = 60,
+    start_x: int = 80,
+    start_y: int = 80,
+) -> str:
+    """
+    Build a complete spine-leaf fabric topology diagram from scratch.
+
+    Layout
+    ------
+    The fabric is arranged on a three-row grid::
+
+        Row 0 (Y = start_y)                  — Spine switches
+        Row 1 (Y = start_y + layer_spacing)  — Leaf switches
+        Row 2 (Y = start_y + 2*layer_spacing)— Compute / GPU nodes
+
+    Within each row nodes are evenly spaced along the X axis, centred
+    relative to whichever row has the most nodes.
+
+    Connectivity
+    ------------
+    * Every spine is connected to every leaf  (full-mesh fabric links).
+    * Every compute node is connected to its parent leaf  (uplinks).
+
+    All created node IDs are returned in the summary so they can be
+    referenced by subsequent ``add_device`` / ``add_link`` calls.
+
+    Args:
+        path:             Full path to the .drawio file. The file is
+                          created (blank) if it does not exist.
+        spine_count:      Number of spine switches (default 2).
+        leaf_count:       Number of leaf switches  (default 4).
+        compute_per_leaf: Compute nodes per leaf   (default 2).
+        spine_names:      Optional explicit hostnames for spines.
+                          Auto-generated as spine01, spine02 … if omitted.
+        leaf_names:       Optional explicit hostnames for leaves.
+        compute_names:    Optional explicit hostnames for compute nodes.
+                          Must have exactly leaf_count × compute_per_leaf
+                          entries if supplied.
+        site:             Site label embedded in each device's metadata.
+        vendor:           Vendor string applied to all devices.
+        platform:         Platform string applied to all devices.
+        node_width:       Node width in pixels  (default 78).
+        node_height:      Node height in pixels (default 78).
+        layer_spacing:    Vertical gap between rows in pixels (default 200).
+        node_spacing:     Horizontal gap between sibling nodes (default 60).
+        start_x:          Left margin for the canvas grid (default 80).
+        start_y:          Top margin for the canvas grid  (default 80).
+
+    Returns:
+        A JSON summary string containing counts and all created cell IDs,
+        or an error message prefixed 'ERROR:'.
+    """
+    try:
+        # ── ensure the file exists ─────────────────────────────────────────
+        p = Path(path)
+        if not p.exists():
+            write_file(path, blank_template("Spine-Leaf Fabric"))
+
+        # ── generate default names if not provided ─────────────────────────
+        total_compute = leaf_count * compute_per_leaf
+
+        if spine_names is None:
+            spine_names = [f"spine{i+1:02d}" for i in range(spine_count)]
+        if leaf_names is None:
+            leaf_names = [f"leaf{i+1:02d}" for i in range(leaf_count)]
+        if compute_names is None:
+            compute_names = [
+                f"compute{i+1:02d}" for i in range(total_compute)
+            ]
+
+        # ── validate name counts ───────────────────────────────────────────
+        if len(spine_names) != spine_count:
+            return f"ERROR: spine_names has {len(spine_names)} entries, expected {spine_count}."
+        if len(leaf_names) != leaf_count:
+            return f"ERROR: leaf_names has {len(leaf_names)} entries, expected {leaf_count}."
+        if len(compute_names) != total_compute:
+            return (
+                f"ERROR: compute_names has {len(compute_names)} entries, "
+                f"expected {leaf_count} × {compute_per_leaf} = {total_compute}."
+            )
+
+        # ── grid sizing ────────────────────────────────────────────────────
+        # Centre each row relative to the widest row.
+        max_nodes    = max(spine_count, leaf_count, total_compute)
+        row_width    = max_nodes * node_width + (max_nodes - 1) * node_spacing
+
+        def _row_x(count: int, idx: int) -> int:
+            """Return X for the idx-th node in a row of `count` nodes."""
+            row_span = count * node_width + (count - 1) * node_spacing
+            offset   = (row_width - row_span) // 2
+            return start_x + offset + idx * (node_width + node_spacing)
+
+        row_y = [
+            start_y,
+            start_y + layer_spacing,
+            start_y + 2 * layer_spacing,
+        ]
+
+        created: dict = {"spines": {}, "leaves": {}, "compute": {}, "links": []}
+
+        # ── add spine nodes ────────────────────────────────────────────────
+        for i, name in enumerate(spine_names):
+            cid = add_device(
+                path=path, hostname=name, role="spine",
+                vendor=vendor, platform=platform, site=site,
+                x=_row_x(spine_count, i), y=row_y[0],
+                width=node_width, height=node_height,
+            )
+            if cid.startswith("ERROR"):
+                return cid
+            created["spines"][name] = cid
+
+        # ── add leaf nodes ─────────────────────────────────────────────────
+        for i, name in enumerate(leaf_names):
+            cid = add_device(
+                path=path, hostname=name, role="leaf",
+                vendor=vendor, platform=platform, site=site,
+                x=_row_x(leaf_count, i), y=row_y[1],
+                width=node_width, height=node_height,
+            )
+            if cid.startswith("ERROR"):
+                return cid
+            created["leaves"][name] = cid
+
+        # ── add compute nodes ──────────────────────────────────────────────
+        for i, name in enumerate(compute_names):
+            cid = add_device(
+                path=path, hostname=name, role="compute_node",
+                vendor=vendor, platform=platform, site=site,
+                x=_row_x(total_compute, i), y=row_y[2],
+                width=node_width, height=node_height,
+            )
+            if cid.startswith("ERROR"):
+                return cid
+            created["compute"][name] = cid
+
+        # ── spine ↔ leaf full-mesh fabric links ───────────────────────────
+        for spine_name, spine_id in created["spines"].items():
+            for leaf_name, leaf_id in created["leaves"].items():
+                eid = add_link(path, spine_id, leaf_id, link_type="fabric")
+                if eid.startswith("ERROR"):
+                    return eid
+                created["links"].append(
+                    {"type": "fabric", "from": spine_name, "to": leaf_name, "id": eid}
+                )
+
+        # ── leaf ↔ compute uplinks ─────────────────────────────────────────
+        leaf_list = list(created["leaves"].items())
+        for leaf_idx, (leaf_name, leaf_id) in enumerate(leaf_list):
+            start_c = leaf_idx * compute_per_leaf
+            for c_offset in range(compute_per_leaf):
+                c_name = compute_names[start_c + c_offset]
+                c_id   = created["compute"][c_name]
+                eid    = add_link(path, leaf_id, c_id, link_type="uplink")
+                if eid.startswith("ERROR"):
+                    return eid
+                created["links"].append(
+                    {"type": "uplink", "from": leaf_name, "to": c_name, "id": eid}
+                )
+
+        # ── return summary ─────────────────────────────────────────────────
+        summary = {
+            "status":        "ok",
+            "path":          str(p.resolve()),
+            "spine_count":   spine_count,
+            "leaf_count":    leaf_count,
+            "compute_count": total_compute,
+            "link_count":    len(created["links"]),
+            "nodes":         created,
+        }
+        return json.dumps(summary, indent=2)
 
     except Exception as e:
         return f"ERROR: {e}"
