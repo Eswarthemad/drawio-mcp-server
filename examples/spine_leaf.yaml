@@ -1,0 +1,146 @@
+# spine_leaf.yaml
+# Basic 2-spine / 4-leaf / 8-compute fabric for DC1
+# Run with: build_diagram_from_model
+
+meta:
+  name: "DC1 Spine-Leaf Fabric"
+  topology: spine_leaf
+  style_profile: minimal
+
+sites:
+  - name: DC1
+
+devices:
+  - hostname: spine01
+    role: spine
+    site: DC1
+    vendor: NVIDIA
+    platform: Spectrum-X
+
+  - hostname: spine02
+    role: spine
+    site: DC1
+    vendor: NVIDIA
+    platform: Spectrum-X
+
+  - hostname: leaf01
+    role: leaf
+    site: DC1
+    vendor: NVIDIA
+    platform: Spectrum-X
+
+  - hostname: leaf02
+    role: leaf
+    site: DC1
+    vendor: NVIDIA
+    platform: Spectrum-X
+
+  - hostname: leaf03
+    role: leaf
+    site: DC1
+    vendor: NVIDIA
+    platform: Spectrum-X
+
+  - hostname: leaf04
+    role: leaf
+    site: DC1
+    vendor: NVIDIA
+    platform: Spectrum-X
+
+  - hostname: compute01
+    role: compute_node
+    site: DC1
+    vendor: NVIDIA
+    platform: H200
+
+  - hostname: compute02
+    role: compute_node
+    site: DC1
+    vendor: NVIDIA
+    platform: H200
+
+  - hostname: compute03
+    role: compute_node
+    site: DC1
+    vendor: NVIDIA
+    platform: H200
+
+  - hostname: compute04
+    role: compute_node
+    site: DC1
+    vendor: NVIDIA
+    platform: H200
+
+  - hostname: compute05
+    role: compute_node
+    site: DC1
+    vendor: NVIDIA
+    platform: H200
+
+  - hostname: compute06
+    role: compute_node
+    site: DC1
+    vendor: NVIDIA
+    platform: H200
+
+  - hostname: compute07
+    role: compute_node
+    site: DC1
+    vendor: NVIDIA
+    platform: H200
+
+  - hostname: compute08
+    role: compute_node
+    site: DC1
+    vendor: NVIDIA
+    platform: H200
+
+links:
+  - a: spine01
+    b: leaf01
+    type: fabric
+  - a: spine01
+    b: leaf02
+    type: fabric
+  - a: spine01
+    b: leaf03
+    type: fabric
+  - a: spine01
+    b: leaf04
+    type: fabric
+  - a: spine02
+    b: leaf01
+    type: fabric
+  - a: spine02
+    b: leaf02
+    type: fabric
+  - a: spine02
+    b: leaf03
+    type: fabric
+  - a: spine02
+    b: leaf04
+    type: fabric
+  - a: leaf01
+    b: compute01
+    type: uplink
+  - a: leaf01
+    b: compute02
+    type: uplink
+  - a: leaf02
+    b: compute03
+    type: uplink
+  - a: leaf02
+    b: compute04
+    type: uplink
+  - a: leaf03
+    b: compute05
+    type: uplink
+  - a: leaf03
+    b: compute06
+    type: uplink
+  - a: leaf04
+    b: compute07
+    type: uplink
+  - a: leaf04
+    b: compute08
+    type: uplink

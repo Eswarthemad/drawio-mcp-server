@@ -63,34 +63,13 @@ ROLE_LAYER: dict[str, int | str] = {
     "monitoring_node":    "sidebar",
 }
 
-#: Role → draw.io style string.
-#: Phase 3 will replace these with proper style profiles; for now each
-#: role has a minimal distinctive style that makes diagrams readable.
-ROLE_STYLE: dict[str, str] = {
-    "spine":              "shape=mxgraph.cisco.switches.layer_3_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "core_switch":        "shape=mxgraph.cisco.switches.layer_3_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "router":             "shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "firewall":           "shape=mxgraph.cisco.firewalls.firewall;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#ae4132;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "load_balancer":      "rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;",
-    "border_leaf":        "shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#0e7ad1;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "leaf":               "shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#0e7ad1;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "gpu_node":           "shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "storage_node":       "shape=mxgraph.cisco.storage.generic_disk_array;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "compute_node":       "shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "management_switch":  "shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#f0a30a;strokeColor=#BD7000;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
-    "monitoring_node":    "rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;",
-}
-
-#: Default style used when a role has no explicit entry in ROLE_STYLE.
+#: Default style used when a role/profile lookup produces no result.
 DEFAULT_STYLE: str = "rounded=1;whiteSpace=wrap;html=1;"
 
-#: Link styles keyed by a logical link type name.
-LINK_STYLE: dict[str, str] = {
-    "fabric":     "edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;",
-    "uplink":     "edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;",
-    "management": "edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#d6b656;dashed=1;",
-    "default":    "edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;",
-}
+# Style resolution is delegated to styles.py.
+# ROLE_STYLE and LINK_STYLE dicts have been removed — all callers use:
+#   styles.resolve_node_style(role, profile)
+#   styles.resolve_edge_style(link_type)
 
 
 # ==============================================================================
@@ -673,7 +652,8 @@ def add_device(
         known = ", ".join(sorted(ROLE_LAYER.keys()))
         return f"ERROR: Unknown role '{role}'. Known roles: {known}"
 
-    resolved_style = style or ROLE_STYLE.get(role, DEFAULT_STYLE)
+    import styles as _styles
+    resolved_style = style or _styles.resolve_node_style(role, "minimal")
     layer          = ROLE_LAYER[role]
 
     metadata = {
@@ -742,7 +722,8 @@ def add_link(
     Returns:
         The new edge's ID on success, or an error message prefixed 'ERROR:'.
     """
-    resolved_style = LINK_STYLE.get(link_type, LINK_STYLE["default"])
+    import styles as _styles
+    resolved_style = _styles.resolve_edge_style(link_type)
     return insert_edge(path, source_id, target_id, label, resolved_style)
 
 
@@ -761,6 +742,7 @@ def build_spine_leaf_fabric(
     site: str = "DC1",
     vendor: str = "generic",
     platform: str = "",
+    style_profile: str = "minimal",
     node_width: int = 78,
     node_height: int = 78,
     layer_spacing: int = 200,
@@ -805,6 +787,7 @@ def build_spine_leaf_fabric(
         site:             Site label embedded in each device's metadata.
         vendor:           Vendor string applied to all devices.
         platform:         Platform string applied to all devices.
+        style_profile:    Style profile name (default 'minimal').
         node_width:       Node width in pixels  (default 78).
         node_height:      Node height in pixels (default 78).
         layer_spacing:    Vertical gap between rows in pixels (default 200).
@@ -817,6 +800,7 @@ def build_spine_leaf_fabric(
         or an error message prefixed 'ERROR:'.
     """
     try:
+        import styles as _styles
         # ── ensure the file exists ─────────────────────────────────────────
         p = Path(path)
         if not p.exists():
@@ -871,6 +855,7 @@ def build_spine_leaf_fabric(
                 vendor=vendor, platform=platform, site=site,
                 x=_row_x(spine_count, i), y=row_y[0],
                 width=node_width, height=node_height,
+                style=_styles.resolve_node_style("spine", style_profile),
             )
             if cid.startswith("ERROR"):
                 return cid
@@ -883,6 +868,7 @@ def build_spine_leaf_fabric(
                 vendor=vendor, platform=platform, site=site,
                 x=_row_x(leaf_count, i), y=row_y[1],
                 width=node_width, height=node_height,
+                style=_styles.resolve_node_style("leaf", style_profile),
             )
             if cid.startswith("ERROR"):
                 return cid
@@ -895,6 +881,7 @@ def build_spine_leaf_fabric(
                 vendor=vendor, platform=platform, site=site,
                 x=_row_x(total_compute, i), y=row_y[2],
                 width=node_width, height=node_height,
+                style=_styles.resolve_node_style("compute_node", style_profile),
             )
             if cid.startswith("ERROR"):
                 return cid
@@ -938,3 +925,110 @@ def build_spine_leaf_fabric(
 
     except Exception as e:
         return f"ERROR: {e}"
+
+
+# ==============================================================================
+# PHASE 3 — DIAGRAM FROM MODEL
+# ==============================================================================
+
+def build_diagram_from_model(path: str, yaml_path: str) -> str:
+    """
+    Build a draw.io diagram from a YAML topology model file.
+
+    Execution order:
+        1. Parse YAML into a TopologyModel  (models.py)
+        2. Validate the model               (validators.py)
+        3. Hard fail with JSON report if any errors found
+        4. Resolve style profile            (styles.py)
+        5. Dispatch to the correct builder  (this module)
+        6. Return JSON summary with warnings embedded
+
+    The ``meta.topology`` key in the YAML selects the builder.
+    If missing, defaults to ``spine_leaf`` and emits a W001 warning.
+
+    Args:
+        path:      Full path where the .drawio file will be written.
+        yaml_path: Full path to the YAML topology model file.
+
+    Returns:
+        JSON string — either a build summary (status: ok) or a full
+        error report (status: error).
+    """
+    import json as _json
+    import models as _models
+    import validators as _validators
+
+    # ── parse ─────────────────────────────────────────────────────────────────
+    try:
+        model = _models.load_model(yaml_path)
+    except FileNotFoundError as e:
+        return _json.dumps({
+            "status": "error",
+            "errors": [{"code": "E099", "field": "yaml_path", "message": str(e)}],
+            "warnings": [],
+        }, indent=2)
+    except Exception as e:
+        return _json.dumps({
+            "status": "error",
+            "errors": [{"code": "E098", "field": "yaml_path", "message": f"YAML parse error: {e}"}],
+            "warnings": [],
+        }, indent=2)
+
+    # ── validate ──────────────────────────────────────────────────────────────
+    result = _validators.validate(model)
+
+    if not result.ok:
+        report = result.to_dict()
+        return _json.dumps(report, indent=2)
+
+    # ── dispatch to builder ───────────────────────────────────────────────────
+    topology = model.meta.topology
+
+    if topology == "spine_leaf":
+        # Derive builder parameters from model devices
+        spines   = [d.hostname for d in model.devices if d.role == "spine"]
+        leaves   = [d.hostname for d in model.devices if d.role == "leaf"]
+        computes = [d.hostname for d in model.devices if d.role == "compute_node"]
+
+        # Infer compute_per_leaf — use 0 if no compute nodes declared
+        compute_per_leaf = (len(computes) // len(leaves)) if leaves and computes else 0
+
+        # Representative site/vendor/platform from first spine (or first device)
+        anchor  = model.devices[0] if model.devices else None
+        site     = anchor.site     if anchor else ""
+        vendor   = anchor.vendor   if anchor else ""
+        platform = anchor.platform if anchor else ""
+
+        build_result_str = build_spine_leaf_fabric(
+            path             = path,
+            spine_count      = len(spines),
+            leaf_count       = len(leaves),
+            compute_per_leaf = compute_per_leaf,
+            spine_names      = spines   or None,
+            leaf_names       = leaves   or None,
+            compute_names    = computes or None,
+            site             = site,
+            vendor           = vendor,
+            platform         = platform,
+            style_profile    = model.meta.style_profile,
+        )
+
+        # build_spine_leaf_fabric returns JSON on success or "ERROR: ..." on fail
+        if build_result_str.startswith("ERROR"):
+            return _json.dumps({
+                "status":   "error",
+                "errors":   [{"code": "E097", "field": "build", "message": build_result_str}],
+                "warnings": result.to_dict()["warnings"],
+            }, indent=2)
+
+        build_summary = _json.loads(build_result_str)
+        build_summary["warnings"] = result.to_dict()["warnings"]
+        return _json.dumps(build_summary, indent=2)
+
+    # ── unsupported topology (should be caught by validator, safety net) ──────
+    return _json.dumps({
+        "status": "error",
+        "errors": [{"code": "E006", "field": "meta.topology",
+                    "message": f"No builder available for topology '{topology}'."}],
+        "warnings": result.to_dict()["warnings"],
+    }, indent=2)

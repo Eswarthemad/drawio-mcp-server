@@ -393,6 +393,7 @@ def build_spine_leaf_fabric(
     site: str = "DC1",
     vendor: str = "generic",
     platform: str = "",
+    style_profile: str = "minimal",
     node_width: int = 78,
     node_height: int = 78,
     layer_spacing: int = 200,
@@ -426,6 +427,7 @@ def build_spine_leaf_fabric(
         site:             Site label for all device metadata.
         vendor:           Vendor string for all devices.
         platform:         Platform string for all devices.
+        style_profile:    Visual style: minimal | enterprise | dark | vendor-neutral.
         node_width:       Node width in pixels  (default 78).
         node_height:      Node height in pixels (default 78).
         layer_spacing:    Vertical gap between rows (default 200).
@@ -439,11 +441,64 @@ def build_spine_leaf_fabric(
     return drawio.build_spine_leaf_fabric(
         path, spine_count, leaf_count, compute_per_leaf,
         spine_names, leaf_names, compute_names,
-        site, vendor, platform,
+        site, vendor, platform, style_profile,
         node_width, node_height,
         layer_spacing, node_spacing,
         start_x, start_y,
     )
+
+
+# ==============================================================================
+# TOOL 14 — build_diagram_from_model
+# ==============================================================================
+
+@mcp.tool()
+def build_diagram_from_model(path: str, yaml_path: str) -> str:
+    """
+    Build a draw.io diagram from a YAML topology model file.
+
+    The YAML file describes the full topology — devices, links, sites,
+    and visual style — and this tool turns it into a complete diagram
+    in one call.
+
+    Validation runs before any diagram is touched. If the YAML contains
+    errors (unknown roles, broken link references, duplicate hostnames,
+    unsupported topology, etc.) the build is refused and a full JSON
+    error report is returned listing every problem found.
+
+    If topology is not declared in the YAML it defaults to spine_leaf
+    and a W001 warning is included in the response.
+
+    YAML schema:
+        meta:
+          name: "My DC Fabric"
+          topology: spine_leaf        # spine_leaf (default if omitted)
+          style_profile: minimal      # minimal | enterprise | dark | vendor-neutral
+
+        sites:
+          - name: DC1
+
+        devices:
+          - hostname: spine01
+            role: spine
+            site: DC1
+            vendor: NVIDIA
+            platform: H200
+
+        links:
+          - a: spine01
+            b: leaf01
+            type: fabric
+
+    Args:
+        path:      Full path where the .drawio file will be written.
+        yaml_path: Full path to the YAML topology model file.
+
+    Returns:
+        JSON — build summary with optional warnings on success,
+        or full error report on failure.
+    """
+    return drawio.build_diagram_from_model(path, yaml_path)
 
 
 # ==============================================================================
