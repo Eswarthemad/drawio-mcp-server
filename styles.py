@@ -56,6 +56,12 @@ _MINIMAL: dict[str, str] = {
     "compute_node":       "rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;",
     "management_switch":  "rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;",
     "monitoring_node":    "rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;",
+    # Phase 4 additions
+    "internet":           "ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;",
+    "application_server": "rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;",
+    "database_node":      "shape=mxgraph.cisco.storage.generic_disk_array;sketch=0;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalLabelPosition=bottom;verticalAlign=top;align=center;",
+    "wan_router":         "rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;",
+    "branch_router":      "rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;",
 }
 
 _ENTERPRISE: dict[str, str] = {
@@ -72,6 +78,12 @@ _ENTERPRISE: dict[str, str] = {
     "compute_node":       "shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
     "management_switch":  "shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#f0a30a;strokeColor=#BD7000;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
     "monitoring_node":    "rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;",
+    # Phase 4 additions
+    "internet":           "shape=mxgraph.cisco.sites.generic_building;sketch=0;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalLabelPosition=bottom;verticalAlign=top;align=center;",
+    "application_server": "shape=mxgraph.cisco.servers.standard_server;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "database_node":      "shape=mxgraph.cisco.storage.generic_disk_array;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#647687;strokeColor=#314354;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "wan_router":         "shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
+    "branch_router":      "shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#0e7ad1;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;",
 }
 
 _DARK: dict[str, str] = {
@@ -88,6 +100,12 @@ _DARK: dict[str, str] = {
     "compute_node":       "rounded=1;whiteSpace=wrap;html=1;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#cccccc;",
     "management_switch":  "rounded=1;whiteSpace=wrap;html=1;fillColor=#5c4a00;strokeColor=#c4a000;fontColor=#ffffff;",
     "monitoring_node":    "rounded=1;whiteSpace=wrap;html=1;fillColor=#5c4a00;strokeColor=#c4a000;fontColor=#ffffff;",
+    # Phase 4 additions
+    "internet":           "ellipse;whiteSpace=wrap;html=1;fillColor=#1a1a1a;strokeColor=#888888;fontColor=#cccccc;",
+    "application_server": "rounded=1;whiteSpace=wrap;html=1;fillColor=#1e5c3a;strokeColor=#4caf80;fontColor=#ffffff;",
+    "database_node":      "rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a1a;strokeColor=#888888;fontColor=#cccccc;",
+    "wan_router":         "rounded=1;whiteSpace=wrap;html=1;fillColor=#1e4d78;strokeColor=#5ba4cf;fontColor=#ffffff;fontStyle=1;",
+    "branch_router":      "rounded=1;whiteSpace=wrap;html=1;fillColor=#1a3a5c;strokeColor=#4a8fc4;fontColor=#ffffff;",
 }
 
 _VENDOR_NEUTRAL: dict[str, str] = {
@@ -104,6 +122,12 @@ _VENDOR_NEUTRAL: dict[str, str] = {
     "compute_node":       "shape=mxgraph.network.server;sketch=0;html=1;pointerEvents=1;fillColor=#f5f5f5;strokeColor=#666666;verticalLabelPosition=bottom;verticalAlign=top;align=center;",
     "management_switch":  "shape=mxgraph.network.switch;sketch=0;html=1;pointerEvents=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalLabelPosition=bottom;verticalAlign=top;align=center;",
     "monitoring_node":    "shape=mxgraph.network.server;sketch=0;html=1;pointerEvents=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalLabelPosition=bottom;verticalAlign=top;align=center;",
+    # Phase 4 additions
+    "internet":           "ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;",
+    "application_server": "shape=mxgraph.network.server;sketch=0;html=1;pointerEvents=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalLabelPosition=bottom;verticalAlign=top;align=center;",
+    "database_node":      "shape=mxgraph.network.server;sketch=0;html=1;pointerEvents=1;fillColor=#f5f5f5;strokeColor=#666666;verticalLabelPosition=bottom;verticalAlign=top;align=center;",
+    "wan_router":         "shape=mxgraph.network.router;sketch=0;html=1;pointerEvents=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalLabelPosition=bottom;verticalAlign=top;align=center;",
+    "branch_router":      "shape=mxgraph.network.router;sketch=0;html=1;pointerEvents=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalLabelPosition=bottom;verticalAlign=top;align=center;",
 }
 
 #: Master profile registry — maps profile name to its style table.
@@ -128,6 +152,7 @@ _EDGE_STYLES: dict[str, str] = {
     "fabric":     "edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0e7ad1;",
     "uplink":     "edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#036897;dashed=0;",
     "management": "edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;strokeColor=#d6b656;dashed=1;",
+    "wan":        "edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#666666;dashed=1;dashPattern=8 4;",
     "default":    "edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=1;",
 }
 
@@ -135,6 +160,28 @@ _EDGE_STYLES: dict[str, str] = {
 # ==============================================================================
 # PUBLIC API
 # ==============================================================================
+
+# ── Container styles ──────────────────────────────────────────────────────────
+#: Default container group style — a labelled dashed border.
+CONTAINER_STYLE = (
+    "swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;"
+    "fontColor=#333333;fontStyle=1;fontSize=11;container=1;collapsible=0;"
+    "whiteSpace=wrap;html=1;"
+)
+
+CONTAINER_STYLE_DARK = (
+    "swimlane;startSize=30;fillColor=#1a1a1a;strokeColor=#888888;"
+    "fontColor=#cccccc;fontStyle=1;fontSize=11;container=1;collapsible=0;"
+    "whiteSpace=wrap;html=1;"
+)
+
+
+def resolve_container_style(style_profile: str = "minimal") -> str:
+    """Return the container group style for the given profile."""
+    if style_profile == "dark":
+        return CONTAINER_STYLE_DARK
+    return CONTAINER_STYLE
+
 
 def resolve_node_style(role: str, profile: str = "minimal") -> str:
     """

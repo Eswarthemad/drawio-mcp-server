@@ -8,7 +8,7 @@ The long-term goal is to provide a **vendor-neutral, network-aware automation la
 
 ---
 
-## Why This Project Exists
+# Why This Project Exists
 
 Large infrastructure diagrams — especially **network architecture diagrams** — quickly become difficult to maintain manually.
 
@@ -36,21 +36,40 @@ drawio-mcp-server
 
 ---
 
-## What's New in v1.2.0
+# What's New in v1.3.0
 
-**Diagram-as-data** — describe your topology in YAML and generate a complete diagram in one call.
+**Architecture containers**
 
-**Style profiles** — choose how your diagram looks independently of what it represents. Four profiles ship out of the box: `minimal`, `enterprise`, `dark`, and `vendor-neutral`.
+Diagrams can now include **logical containers** for grouping infrastructure components such as racks, clusters, or availability zones.
 
-**Validation** — the server validates your YAML before touching any file. If there are errors, you get a complete JSON report listing every problem — not just the first one.
+**Hub-Spoke topology support**
 
-**New modules:** `models.py`, `styles.py`, `validators.py`
+In addition to spine-leaf fabrics, the model now supports **hub-spoke network layouts**.
+
+**Improved validation**
+
+Validation now checks:
+
+* declared sites
+* link endpoints
+* topology compatibility
+* device roles and style profiles
+
+Errors and warnings are returned as **structured JSON reports**.
+
+**New modules**
+
+```
+models.py
+styles.py
+validators.py
+```
 
 ---
 
-## Features
+# Features
 
-### Core Diagram Operations (v1.0.0)
+## Core Diagram Operations (v1.0.0)
 
 * Read and write raw draw.io XML
 * List diagram nodes and edges
@@ -59,24 +78,36 @@ drawio-mcp-server
 * Create blank diagrams
 * Auto-layout (TB / BT / LR / RL)
 
-### Network-Aware Primitives (v1.1.0)
+---
 
-* `add_device()` — add devices with semantic roles (spine, leaf, firewall, gpu\_node, etc.) and structured metadata
+## Network-Aware Primitives (v1.1.0)
+
+* `add_device()` — add devices with semantic roles (spine, leaf, firewall, gpu_node, etc.)
 * `add_link()` — add typed links (fabric, uplink, management)
-* `build_spine_leaf_fabric()` — generate a complete spine-leaf topology in one call
-
-### Diagram-as-Data / YAML Model (v1.2.0)
-
-* `build_diagram_from_model()` — build a complete diagram from a YAML topology file
-* Style profiles: `minimal` (default), `enterprise`, `dark`, `vendor-neutral`
-* Full validation with structured JSON error reporting
-* Topology defaulting with explicit warnings
+* `build_spine_leaf_fabric()` — generate a full spine-leaf topology
 
 ---
 
-## Quick Start: YAML to Diagram
+## Diagram-as-Data / YAML Model (v1.2.0)
 
-Describe your topology in a YAML file:
+* `build_diagram_from_model()` — build a complete diagram from YAML
+* Style profiles: `minimal`, `enterprise`, `dark`, `vendor-neutral`
+* Full validation with structured JSON error reporting
+
+---
+
+## Containers and Extended Topologies (v1.3.0)
+
+* Container support for logical grouping of devices
+* Hub-spoke topology model
+* Improved topology validation
+* Expanded role-based styling
+
+---
+
+# Quick Start: YAML → Diagram
+
+Example YAML topology:
 
 ```yaml
 meta:
@@ -91,8 +122,6 @@ devices:
   - hostname: spine01
     role: spine
     site: DC1
-    vendor: NVIDIA
-    platform: Spectrum-X
 
   - hostname: leaf01
     role: leaf
@@ -101,8 +130,6 @@ devices:
   - hostname: compute01
     role: compute_node
     site: DC1
-    vendor: NVIDIA
-    platform: H200
 
 links:
   - a: spine01
@@ -113,7 +140,7 @@ links:
     type: uplink
 ```
 
-Then ask Claude to build it:
+Generate the diagram:
 
 ```
 build_diagram_from_model(
@@ -122,105 +149,80 @@ build_diagram_from_model(
 )
 ```
 
-On success:
+---
 
-```json
-{
-  "status": "ok",
-  "warnings": [],
-  "spine_count": 2,
-  "leaf_count": 4,
-  "compute_count": 8,
-  "link_count": 16
-}
+# Example Output
+
+Example files included in the repository:
+
+```
+examples/
+ ├─ spine_leaf.yaml
+ ├─ spine-leaf-model.drawio
+ └─ spine-leaf-sample.drawio
 ```
 
-On failure, a full error report is returned — every issue, not just the first:
-
-```json
-{
-  "status": "error",
-  "errors": [
-    {
-      "code": "E001",
-      "field": "devices[2].role",
-      "message": "Unknown role 'superswitch'. Valid roles: spine, leaf, ..."
-    },
-    {
-      "code": "E004",
-      "field": "links[0].b",
-      "message": "Link endpoint 'leaf99' does not match any declared device hostname."
-    }
-  ],
-  "warnings": []
-}
-```
+These demonstrate **model-driven diagram generation**.
 
 ---
 
-## Supported Device Roles
+# Supported Device Roles
 
-| Role | Layer | Description |
-|---|---|---|
-| `spine` | 0 | Spine / core switch |
-| `core_switch` | 0 | Core layer switch |
-| `router` | 0 | Router |
-| `firewall` | 0 | Firewall |
-| `load_balancer` | 1 | Load balancer |
-| `border_leaf` | 1 | Border leaf / distribution switch |
-| `leaf` | 2 | ToR / leaf switch |
-| `gpu_node` | 3 | GPU compute node |
-| `compute_node` | 3 | General compute node |
-| `storage_node` | 3 | Storage node |
-| `management_switch` | sidebar | Out-of-band management switch |
-| `monitoring_node` | sidebar | Monitoring / observability node |
-
----
-
-## Style Profiles
-
-| Profile | Description | Dependencies |
-|---|---|---|
-| `minimal` | Plain colour-coded rectangles. **Default.** | None |
-| `enterprise` | Cisco stencil shapes | Cisco shape library in draw.io |
-| `dark` | Dark fills with light text | None |
-| `vendor-neutral` | draw.io built-in network shapes | None |
+| Role              | Layer   | Description                |
+| ----------------- | ------- | -------------------------- |
+| spine             | 0       | Spine / core switch        |
+| core_switch       | 0       | Core layer switch          |
+| router            | 0       | Router                     |
+| firewall          | 0       | Firewall                   |
+| load_balancer     | 1       | Load balancer              |
+| border_leaf       | 1       | Border leaf switch         |
+| leaf              | 2       | ToR / leaf switch          |
+| gpu_node          | 3       | GPU compute node           |
+| compute_node      | 3       | General compute            |
+| storage_node      | 3       | Storage node               |
+| management_switch | sidebar | Out-of-band management     |
+| monitoring_node   | sidebar | Monitoring / observability |
 
 ---
 
-## All 14 Tools
+# Style Profiles
 
-| Tool | Description |
-|---|---|
-| `read_diagram` | Read raw XML from a .drawio file |
-| `write_diagram` | Write raw XML to a .drawio file |
-| `list_diagrams` | List .drawio files in a folder |
-| `list_nodes` | List all nodes and edges in a diagram |
-| `create_blank_diagram` | Create a new empty .drawio file |
-| `add_node` | Add a generic shape |
-| `add_edge` | Add a generic connector |
-| `update_node` | Update label, style, or position of a node |
-| `delete_node` | Delete a node and its connected edges |
-| `auto_layout` | Auto-arrange nodes (TB/BT/LR/RL) |
-| `add_device` | Add a network device with role metadata |
-| `add_link` | Add a typed network link |
-| `build_spine_leaf_fabric` | Build a full spine-leaf topology |
-| `build_diagram_from_model` | Build a diagram from a YAML topology file |
+| Profile        | Description                            |
+| -------------- | -------------------------------------- |
+| minimal        | Plain color-coded rectangles (default) |
+| enterprise     | Cisco-style stencil shapes             |
+| dark           | Dark theme diagram                     |
+| vendor-neutral | draw.io built-in network shapes        |
 
 ---
 
-## Installation
+# All MCP Tools
 
-Clone the repository:
+| Tool                     | Description                   |
+| ------------------------ | ----------------------------- |
+| read_diagram             | Read raw XML                  |
+| write_diagram            | Write raw XML                 |
+| list_diagrams            | List .drawio files            |
+| list_nodes               | List nodes and edges          |
+| create_blank_diagram     | Create new diagram            |
+| add_node                 | Add generic shape             |
+| add_edge                 | Add generic connector         |
+| update_node              | Modify node                   |
+| delete_node              | Delete node                   |
+| auto_layout              | Arrange diagram               |
+| add_device               | Add role-based device         |
+| add_link                 | Add typed network link        |
+| build_spine_leaf_fabric  | Build spine-leaf fabric       |
+| build_diagram_from_model | Build diagram from YAML model |
+
+---
+
+# Installation
 
 ```
 git clone https://github.com/Eswarthemad/drawio-mcp-server.git
 cd drawio-mcp-server
-```
 
-Create and activate a virtual environment:
-
-```
 python -m venv venv
 
 # Windows
@@ -228,19 +230,15 @@ venv\Scripts\activate
 
 # Linux / macOS
 source venv/bin/activate
-```
 
-Install dependencies:
-
-```
 pip install -r requirements.txt
 ```
 
 ---
 
-## Claude Desktop Configuration
+# Claude Desktop Configuration
 
-Add this to your `claude_desktop_config.json`:
+Add to `claude_desktop_config.json`:
 
 ```json
 {
@@ -253,65 +251,56 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
-Config file location:
-
-* **Windows (Store):** `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\claude_desktop_config.json`
-* **Windows (Standard):** `%APPDATA%\Claude\claude_desktop_config.json`
-* **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-Restart Claude Desktop after updating the config. Open a new chat — Claude will pick up all 14 tools.
+Restart Claude Desktop afterward.
 
 ---
 
-## Project Structure
+# Project Structure
 
 ```
-server.py         MCP tool registration (14 tools)
-drawio.py         XML I/O, diagram primitives, topology builders
-models.py         Typed dataclasses + YAML parser (TopologyModel)
-styles.py         Style profile resolver (4 profiles × 12 roles)
-validators.py     Schema validation with structured JSON error reporting
-requirements.txt  Python dependencies
-examples/         Example YAML models and generated diagrams
+server.py        MCP tool registration
+drawio.py        XML engine and topology builders
+models.py        YAML topology model definitions
+styles.py        Style profile resolver
+validators.py    Model validation
+examples/        Sample topology models and diagrams
 ```
 
-### Module emergence rules
+---
 
-New modules are only introduced when there is real content to justify them:
+# Version History
 
-| Module | Appears when |
-|---|---|
-| `layout.py` | Layout logic grows beyond one or two functions |
-| `builders.py` | More than one topology builder needs orchestration |
+| Version | Highlights                       |
+| ------- | -------------------------------- |
+| v1.0.0  | Core diagram manipulation        |
+| v1.1.0  | Network-aware primitives         |
+| v1.2.0  | YAML topology models             |
+| v1.3.0  | Containers and hub-spoke support |
 
 ---
 
-## Example Files
+# Roadmap
 
-| File | Description |
-|---|---|
-| `examples/spine_leaf.yaml` | 2-spine / 4-leaf / 8-compute YAML model |
-| `examples/spine-leaf-sample.drawio` | Pre-built output for reference |
+**Phase 5**
 
----
-
-## Roadmap
-
-**Phase 4 (upcoming)**
-
-* Unit tests (`tests/`)
-* GitHub Actions lint and test workflow
-* Additional topology builders: hub-spoke, multi-site
-* Screenshots in README
+* Unit tests
+* GitHub Actions CI
+* Additional topology builders
+* Multi-site architectures
+* Diagram screenshots in README
 
 ---
 
-## Contributing
+# Contributing
 
-Contributions are welcome. Please read `CONTRIBUTING.md` for design principles and development guidelines.
+Please read:
+
+```
+CONTRIBUTING.md
+```
 
 ---
 
-## License
+# License
 
-Released under the repository license. See `LICENSE`.
+Released under the MIT License.

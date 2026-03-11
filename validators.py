@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from models import TopologyModel, SUPPORTED_TOPOLOGIES, SUPPORTED_STYLE_PROFILES
+from models import TopologyModel, SUPPORTED_TOPOLOGIES, SUPPORTED_STYLE_PROFILES, SUPPORTED_HUB_SPOKE_MODES
 
 
 # ==============================================================================
@@ -145,6 +145,31 @@ def validate(model: TopologyModel) -> ValidationResult:
             message = (
                 f"Unsupported style profile '{model.meta.style_profile}'. "
                 f"Supported: {', '.join(sorted(SUPPORTED_STYLE_PROFILES))}."
+            ),
+        ))
+
+    # ── E009: unsupported hub_spoke mode ──────────────────────────────────────
+    if (model.meta.topology == "hub_spoke"
+            and model.meta.topology_mode
+            and model.meta.topology_mode not in SUPPORTED_HUB_SPOKE_MODES):
+        errors.append(ValidationError(
+            code    = "E009",
+            field   = "meta.topology_mode",
+            message = (
+                f"Unsupported hub_spoke mode '{model.meta.topology_mode}'. "
+                f"Supported: {', '.join(sorted(SUPPORTED_HUB_SPOKE_MODES))}."
+            ),
+        ))
+
+    # ── W006: hub_spoke mode not declared — will default ──────────────────────
+    if (model.meta.topology == "hub_spoke"
+            and not model.meta.topology_mode):
+        warnings.append(ValidationWarning(
+            code    = "W006",
+            field   = "meta.topology_mode",
+            message = (
+                "topology_mode not declared for hub_spoke — defaulting to 'tenant_fabric'. "
+                f"Supported modes: {', '.join(sorted(SUPPORTED_HUB_SPOKE_MODES))}."
             ),
         ))
 
@@ -267,6 +292,20 @@ def validate(model: TopologyModel) -> ValidationResult:
                     f"device hostname."
                 ),
             ))
+
+    # ── container member checks ───────────────────────────────────────────────
+    for i, container in enumerate(model.containers):
+        ref = f"containers[{i}]"
+        for j, member in enumerate(container.members):
+            if member not in seen_hostnames:
+                errors.append(ValidationError(
+                    code    = "E010",
+                    field   = f"{ref}.members[{j}]",
+                    message = (
+                        f"Container '{container.name}' member '{member}' does not "
+                        f"match any declared device hostname."
+                    ),
+                ))
 
     # ── finalise ──────────────────────────────────────────────────────────────
     return ValidationResult(

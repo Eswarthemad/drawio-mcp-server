@@ -306,6 +306,8 @@ def add_device(
     width: int = 78,
     height: int = 78,
     style: str | None = None,
+    style_profile: str = "minimal",
+    parent_id: str = "1",
 ) -> str:
     """
     Add a network device node to a draw.io diagram.
@@ -315,11 +317,11 @@ def add_device(
     draw.io tooltip field so it survives file round-trips.
 
     Valid roles:
-        spine, core_switch, router,
-        firewall, load_balancer,
-        border_leaf, leaf,
-        gpu_node, storage_node, compute_node,
-        management_switch, monitoring_node
+        spine, core_switch, router, wan_router,
+        internet, firewall, load_balancer,
+        border_leaf, leaf, branch_router,
+        application_server, gpu_node, storage_node, compute_node,
+        database_node, management_switch, monitoring_node
 
     Args:
         path:             Full path to the .drawio file.
@@ -333,13 +335,17 @@ def add_device(
         x, y:             Canvas position in pixels.
         width, height:    Node dimensions in pixels.
         style:            Explicit draw.io style (uses role default if omitted).
+        style_profile:    Style profile for automatic style resolution.
+        parent_id:        Parent cell ID. Default '1' (root).
+                          Pass a container ID to place device inside a container.
 
     Returns:
         The new cell's ID on success, or an error message.
     """
     return drawio.add_device(
         path, hostname, role, vendor, platform,
-        site, zone, redundancy_group, x, y, width, height, style,
+        site, zone, redundancy_group, x, y, width, height,
+        style, style_profile, parent_id,
     )
 
 
@@ -499,6 +505,205 @@ def build_diagram_from_model(path: str, yaml_path: str) -> str:
         or full error report on failure.
     """
     return drawio.build_diagram_from_model(path, yaml_path)
+
+
+# ==============================================================================
+# TOOL 15 — add_container
+# ==============================================================================
+
+@mcp.tool()
+def add_container(
+    path:          str,
+    label:         str,
+    x:             int = 60,
+    y:             int = 60,
+    width:         int = 400,
+    height:        int = 300,
+    style_profile: str = "minimal",
+) -> str:
+    """
+    Add a labelled container group to an existing diagram.
+
+    The container is a draw.io swimlane cell with container=1.
+    Nodes added with add_device(..., parent_id=<container_id>) are placed inside.
+
+    Args:
+        path:          Full path to the .drawio file.
+        label:         Text label displayed in the container header bar.
+        x:             Top-left X position in pixels (default 60).
+        y:             Top-left Y position in pixels (default 60).
+        width:         Container width in pixels (default 400).
+        height:        Container height in pixels (default 300).
+        style_profile: Visual profile for container colour ('minimal' or 'dark').
+
+    Returns:
+        The new container cell's ID — pass this as parent_id to add_device().
+    """
+    return drawio.add_container(path, label, x, y, width, height, style_profile)
+
+
+# ==============================================================================
+# TOOL 16 — group_nodes
+# ==============================================================================
+
+@mcp.tool()
+def group_nodes(
+    path:          str,
+    cell_ids:      list[str],
+    label:         str = "",
+    padding:       int = 40,
+    style_profile: str = "minimal",
+) -> str:
+    """
+    Wrap existing nodes inside a new container group.
+
+    Computes the bounding box of all listed cell IDs, creates a container around
+    them with padding, and re-parents all cells into it.
+
+    Use this to group nodes that already exist in a diagram.
+    For new nodes, use add_container() then add_device(..., parent_id=...).
+
+    Args:
+        path:          Full path to the .drawio file.
+        cell_ids:      List of existing cell IDs to group (use list_nodes to find IDs).
+        label:         Label for the container header bar.
+        padding:       Pixel padding around the bounding box (default 40).
+        style_profile: Visual profile for container colour.
+
+    Returns:
+        The new container cell's ID on success, or an error message.
+    """
+    return drawio.group_nodes(path, cell_ids, label, padding, style_profile)
+
+
+# ==============================================================================
+# TOOL 17 — build_hub_spoke
+# ==============================================================================
+
+@mcp.tool()
+def build_hub_spoke(
+    path:               str,
+    mode:               str = "tenant_fabric",
+    hub_count:          int = 2,
+    spoke_count:        int = 4,
+    endpoint_per_spoke: int = 2,
+    hub_names:          list[str] | None = None,
+    spoke_names:        list[str] | None = None,
+    endpoint_names:     list[str] | None = None,
+    site:               str = "",
+    style_profile:      str = "minimal",
+) -> str:
+    """
+    Build a hub-spoke topology diagram.
+
+    Two modes:
+        tenant_fabric — Hub spines connect full-mesh to spoke leaves,
+                        each spoke connects to its compute endpoints.
+                        Suitable for multi-tenant GPU fabric, shared DC core.
+
+        wan_branch    — WAN router hub connects to branch routers via WAN links,
+                        branches connect to their local endpoints.
+                        Suitable for branch-office WAN diagrams.
+
+    Args:
+        path:               Full path where the .drawio file will be written.
+        mode:               'tenant_fabric' (default) or 'wan_branch'.
+        hub_count:          Number of hub nodes (default 2).
+        spoke_count:        Number of spoke nodes (default 4).
+        endpoint_per_spoke: Compute/endpoint nodes per spoke (default 2).
+        hub_names:          Override hub hostnames (e.g. ['spine01','spine02']).
+        spoke_names:        Override spoke hostnames.
+        endpoint_names:     Override endpoint hostnames (flat list, len = spoke_count × endpoint_per_spoke).
+        site:               Site label applied to all devices.
+        style_profile:      Visual style profile ('minimal', 'enterprise', 'dark', 'vendor-neutral').
+
+    Returns:
+        JSON build summary on success, or "ERROR: ..." on failure.
+    """
+    return drawio.build_hub_spoke(
+        path=path,
+        mode=mode,
+        hub_count=hub_count,
+        spoke_count=spoke_count,
+        endpoint_per_spoke=endpoint_per_spoke,
+        hub_names=hub_names,
+        spoke_names=spoke_names,
+        endpoint_names=endpoint_names,
+        site=site,
+        style_profile=style_profile,
+    )
+
+
+# ==============================================================================
+# TOOL 18 — build_security_stack
+# ==============================================================================
+
+@mcp.tool()
+def build_security_stack(
+    path:             str,
+    firewall_count:   int = 2,
+    lb_count:         int = 2,
+    app_count:        int = 4,
+    db_count:         int = 2,
+    include_internet: bool = True,
+    include_lb:       bool = True,
+    monitoring_count: int = 1,
+    firewall_names:   list[str] | None = None,
+    lb_names:         list[str] | None = None,
+    app_names:        list[str] | None = None,
+    db_names:         list[str] | None = None,
+    monitoring_names: list[str] | None = None,
+    site:             str = "",
+    style_profile:    str = "minimal",
+) -> str:
+    """
+    Build a security-zone stack diagram with configurable tiers.
+
+    Tiers (top → bottom):
+        Internet gateway  (optional)  — WAN link down to firewall
+        Firewall HA pair              — core security perimeter
+        Load balancer tier (optional) — fabric link to/from app tier
+        Application / web servers     — fabric link to DB tier
+        Database / storage            — uplink style
+        Sidebar: monitoring nodes     — management link to firewall
+
+    Args:
+        path:             Full path where the .drawio file will be written.
+        firewall_count:   Number of firewalls (default 2 for HA pair).
+        lb_count:         Number of load balancers (default 2).
+        app_count:        Number of application servers (default 4).
+        db_count:         Number of database nodes (default 2).
+        include_internet: Add internet gateway node at top (default True).
+        include_lb:       Include load balancer tier (default True).
+        monitoring_count: Number of monitoring nodes in sidebar (default 1).
+        firewall_names:   Override firewall hostnames (e.g. ['fw-primary','fw-standby']).
+        lb_names:         Override load balancer hostnames.
+        app_names:        Override application server hostnames.
+        db_names:         Override database node hostnames.
+        monitoring_names: Override monitoring node hostnames.
+        site:             Site label applied to all devices.
+        style_profile:    Visual style profile ('minimal', 'enterprise', 'dark', 'vendor-neutral').
+
+    Returns:
+        JSON build summary on success, or "ERROR: ..." on failure.
+    """
+    return drawio.build_security_stack(
+        path=path,
+        firewall_count=firewall_count,
+        lb_count=lb_count,
+        app_count=app_count,
+        db_count=db_count,
+        include_internet=include_internet,
+        include_lb=include_lb,
+        monitoring_count=monitoring_count,
+        firewall_names=firewall_names,
+        lb_names=lb_names,
+        app_names=app_names,
+        db_names=db_names,
+        monitoring_names=monitoring_names,
+        site=site,
+        style_profile=style_profile,
+    )
 
 
 # ==============================================================================

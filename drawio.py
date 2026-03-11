@@ -43,21 +43,27 @@ from pathlib import Path
 #: the string "sidebar" for management / monitoring nodes that are
 #: placed in a dedicated column outside the main grid.
 ROLE_LAYER: dict[str, int | str] = {
-    # Core fabric
+    # Core fabric / WAN
     "spine":              0,
     "core_switch":        0,
     "router":             0,
-    # Perimeter / security (placed in a separate left column at layer 0 height)
+    "wan_router":         0,
+    # Perimeter / security
+    "internet":          -1,   # above firewall — topmost tier
     "firewall":           0,
     "load_balancer":      1,
-    # Aggregation / distribution
+    # Aggregation / distribution / spoke
     "border_leaf":        1,
+    "branch_router":      1,
     # Access / ToR
     "leaf":               2,
-    # Compute / workload
+    # Application / workload
+    "application_server": 3,
     "gpu_node":           3,
     "storage_node":       3,
     "compute_node":       3,
+    # Database / persistence
+    "database_node":      4,
     # Out-of-band (sidebar column, not in main grid)
     "management_switch":  "sidebar",
     "monitoring_node":    "sidebar",
@@ -614,6 +620,8 @@ def add_device(
     width: int = 78,
     height: int = 78,
     style: str | None = None,
+    style_profile: str = "minimal",
+    parent_id: str = "1",
 ) -> str:
     """
     Add a network device node to the diagram.
@@ -626,7 +634,7 @@ def add_device(
     ``ROLE_LAYER[role]`` and is stored for reference by layout functions.
 
     If ``style`` is not supplied the role's default style from
-    ``ROLE_STYLE`` is used, falling back to ``DEFAULT_STYLE``.
+    ``styles.resolve_node_style(role, style_profile)`` is used.
 
     Args:
         path:             Full path to the .drawio file.
@@ -643,7 +651,10 @@ def add_device(
         width:            Node width in pixels (default 78 for icon shapes).
         height:           Node height in pixels (default 78 for icon shapes).
         style:            Explicit draw.io style string. If omitted the
-                          role default from ROLE_STYLE is used.
+                          role default from styles.resolve_node_style() is used.
+        style_profile:    Style profile for automatic style resolution (default 'minimal').
+        parent_id:        Parent cell ID. Use '1' for root (default).
+                          Pass a container cell ID to place this device inside a container.
 
     Returns:
         The new cell's ID on success, or an error message prefixed 'ERROR:'.
@@ -653,7 +664,7 @@ def add_device(
         return f"ERROR: Unknown role '{role}'. Known roles: {known}"
 
     import styles as _styles
-    resolved_style = style or _styles.resolve_node_style(role, "minimal")
+    resolved_style = style or _styles.resolve_node_style(role, style_profile)
     layer          = ROLE_LAYER[role]
 
     metadata = {
@@ -678,7 +689,7 @@ def add_device(
         cell.set("style",   resolved_style)
         cell.set("tooltip", json.dumps(metadata))
         cell.set("vertex",  "1")
-        cell.set("parent",  "1")
+        cell.set("parent",  parent_id)
 
         geo = ET.SubElement(cell, "mxGeometry")
         geo.set("x",      str(x))
@@ -1025,6 +1036,72 @@ def build_diagram_from_model(path: str, yaml_path: str) -> str:
         build_summary["warnings"] = result.to_dict()["warnings"]
         return _json.dumps(build_summary, indent=2)
 
+    # ── hub_spoke dispatch ────────────────────────────────────────────────────
+    if topology == "hub_spoke":
+        mode = model.meta.topology_mode or "tenant_fabric"
+        hubs    = [d.hostname for d in model.devices if d.role in ("spine", "wan_router")]
+        spokes  = [d.hostname for d in model.devices if d.role in ("leaf", "branch_router")]
+        eps     = [d.hostname for d in model.devices if d.role in ("compute_node", "gpu_node", "storage_node")]
+        ep_per  = (len(eps) // len(spokes)) if spokes else 2
+
+        build_result_str = build_hub_spoke(
+            path=path,
+            mode=mode,
+            hub_count=len(hubs),
+            spoke_count=len(spokes),
+            endpoint_per_spoke=ep_per,
+            hub_names=hubs or None,
+            spoke_names=spokes or None,
+            endpoint_names=eps or None,
+            site=model.sites[0].name if model.sites else "",
+            style_profile=model.meta.style_profile,
+        )
+        if build_result_str.startswith("ERROR"):
+            return _json.dumps({
+                "status":   "error",
+                "errors":   [{"code": "E097", "field": "build", "message": build_result_str}],
+                "warnings": result.to_dict()["warnings"],
+            }, indent=2)
+        build_summary = _json.loads(build_result_str)
+        build_summary["warnings"] = result.to_dict()["warnings"]
+        return _json.dumps(build_summary, indent=2)
+
+    # ── security_stack dispatch ───────────────────────────────────────────────
+    if topology == "security_stack":
+        fws  = [d.hostname for d in model.devices if d.role == "firewall"]
+        lbs  = [d.hostname for d in model.devices if d.role == "load_balancer"]
+        apps = [d.hostname for d in model.devices if d.role == "application_server"]
+        dbs  = [d.hostname for d in model.devices if d.role == "database_node"]
+        mons = [d.hostname for d in model.devices if d.role == "monitoring_node"]
+        inet = any(d.role == "internet" for d in model.devices)
+
+        build_result_str = build_security_stack(
+            path=path,
+            firewall_count=len(fws) or 2,
+            lb_count=len(lbs) or 2,
+            app_count=len(apps) or 4,
+            db_count=len(dbs) or 2,
+            include_internet=inet,
+            include_lb=bool(lbs),
+            monitoring_count=len(mons) or 1,
+            firewall_names=fws or None,
+            lb_names=lbs or None,
+            app_names=apps or None,
+            db_names=dbs or None,
+            monitoring_names=mons or None,
+            site=model.sites[0].name if model.sites else "",
+            style_profile=model.meta.style_profile,
+        )
+        if build_result_str.startswith("ERROR"):
+            return _json.dumps({
+                "status":   "error",
+                "errors":   [{"code": "E097", "field": "build", "message": build_result_str}],
+                "warnings": result.to_dict()["warnings"],
+            }, indent=2)
+        build_summary = _json.loads(build_result_str)
+        build_summary["warnings"] = result.to_dict()["warnings"]
+        return _json.dumps(build_summary, indent=2)
+
     # ── unsupported topology (should be caught by validator, safety net) ──────
     return _json.dumps({
         "status": "error",
@@ -1032,3 +1109,507 @@ def build_diagram_from_model(path: str, yaml_path: str) -> str:
                     "message": f"No builder available for topology '{topology}'."}],
         "warnings": result.to_dict()["warnings"],
     }, indent=2)
+
+# ==============================================================================
+# PHASE 4 — CONTAINERS, HUB-SPOKE, SECURITY STACK
+# ==============================================================================
+
+def add_container(
+    path:          str,
+    label:         str,
+    x:             int  = 60,
+    y:             int  = 60,
+    width:         int  = 400,
+    height:        int  = 300,
+    style_profile: str  = "minimal",
+) -> str:
+    """
+    Add a labelled container group to an existing diagram.
+
+    The container is an mxCell with container=1.  Child nodes should set their
+    parent to this container's returned ID via add_device(..., parent_id=<id>).
+
+    Args:
+        path:          Full path to the .drawio file.
+        label:         Text label displayed in the container header.
+        x:             Top-left X position (default 60).
+        y:             Top-left Y position (default 60).
+        width:         Container width in pixels (default 400).
+        height:        Container height in pixels (default 300).
+        style_profile: Style profile for container colour ('minimal' or 'dark').
+
+    Returns:
+        The new container cell's ID on success, or "ERROR: ..." on failure.
+    """
+    try:
+        from styles import resolve_container_style
+        style   = resolve_container_style(style_profile)
+        tree    = load_diagram(path)
+        root    = get_root_cell(tree)
+        cell_id = next_id(root)
+        parent_cell = root.find(".//mxCell[@id='1']")
+        parent_id   = "1" if parent_cell is not None else "0"
+
+        cell = ET.SubElement(root, "mxCell", {
+            "id":        cell_id,
+            "value":     label,
+            "style":     style,
+            "vertex":    "1",
+            "parent":    parent_id,
+            "container": "1",
+        })
+        ET.SubElement(cell, "mxGeometry", {
+            "x":      str(x),
+            "y":      str(y),
+            "width":  str(width),
+            "height": str(height),
+            "as":     "geometry",
+        })
+        save_diagram(tree, path)
+        return cell_id
+    except Exception as exc:
+        return f"ERROR: {exc}"
+
+
+def group_nodes(
+    path:          str,
+    cell_ids:      list[str],
+    label:         str  = "",
+    padding:       int  = 40,
+    style_profile: str  = "minimal",
+) -> str:
+    """
+    Wrap existing nodes inside a new container group.
+
+    Computes a bounding box around all listed cell IDs, adds a container
+    with that bounding box (plus padding), and re-parents all cells into it.
+
+    Args:
+        path:          Full path to the .drawio file.
+        cell_ids:      List of existing cell IDs to group.
+        label:         Label for the container header.
+        padding:       Pixel padding around the bounding box (default 40).
+        style_profile: Style profile for the container.
+
+    Returns:
+        The new container cell's ID on success, or "ERROR: ..." on failure.
+    """
+    try:
+        from styles import resolve_container_style
+        tree = load_diagram(path)
+        root = get_root_cell(tree)
+
+        # ── gather geometry of target cells ──────────────────────────────────
+        cell_map = {c.get("id"): c for c in root.iter("mxCell")}
+        xs, ys, x2s, y2s = [], [], [], []
+
+        for cid in cell_ids:
+            cell = cell_map.get(cid)
+            if cell is None:
+                return f"ERROR: Cell '{cid}' not found in diagram."
+            geo = cell.find("mxGeometry")
+            if geo is None:
+                continue
+            cx = float(geo.get("x", 0))
+            cy = float(geo.get("y", 0))
+            cw = float(geo.get("width",  120))
+            ch = float(geo.get("height", 60))
+            xs.append(cx);  ys.append(cy)
+            x2s.append(cx + cw); y2s.append(cy + ch)
+
+        if not xs:
+            return "ERROR: No positioned cells found in provided IDs."
+
+        HEADER = 30   # swimlane header height
+        bx = min(xs)  - padding
+        by = min(ys)  - padding - HEADER
+        bw = max(x2s) - bx - padding + padding * 2
+        bh = max(y2s) - (by + HEADER) + padding * 2 + HEADER
+
+        # ── create the container ─────────────────────────────────────────────
+        style     = resolve_container_style(style_profile)
+        new_id    = next_id(root)
+        parent_cell = root.find(".//mxCell[@id='1']")
+        parent_id   = "1" if parent_cell is not None else "0"
+
+        cont = ET.SubElement(root, "mxCell", {
+            "id":        new_id,
+            "value":     label,
+            "style":     style,
+            "vertex":    "1",
+            "parent":    parent_id,
+            "container": "1",
+        })
+        ET.SubElement(cont, "mxGeometry", {
+            "x":      str(int(bx)),
+            "y":      str(int(by)),
+            "width":  str(int(bw)),
+            "height": str(int(bh)),
+            "as":     "geometry",
+        })
+
+        # ── re-parent target cells into the new container ─────────────────────
+        for cid in cell_ids:
+            cell = cell_map.get(cid)
+            if cell is None:
+                continue
+            cell.set("parent", new_id)
+            # Adjust geometry to be relative to container
+            geo = cell.find("mxGeometry")
+            if geo is not None:
+                geo.set("x", str(float(geo.get("x", 0)) - bx))
+                geo.set("y", str(float(geo.get("y", 0)) - (by + HEADER)))
+
+        save_diagram(tree, path)
+        return new_id
+    except Exception as exc:
+        return f"ERROR: {exc}"
+
+
+def build_hub_spoke(
+    path:          str,
+    mode:          str        = "tenant_fabric",
+    hub_count:     int        = 2,
+    spoke_count:   int        = 4,
+    endpoint_per_spoke: int   = 2,
+    hub_names:     list[str]  | None = None,
+    spoke_names:   list[str]  | None = None,
+    endpoint_names: list[str] | None = None,
+    site:          str        = "",
+    style_profile: str        = "minimal",
+) -> str:
+    """
+    Build a hub-spoke topology diagram.
+
+    Two modes:
+        tenant_fabric — hub spines + spoke leaves + compute endpoints.
+                        Full-mesh hub-to-spoke, spoke-to-endpoint wiring.
+        wan_branch    — WAN router hub + branch routers + endpoints.
+                        Hub connects to all branches via WAN links.
+
+    Args:
+        path:               Full path to write the .drawio file.
+        mode:               'tenant_fabric' or 'wan_branch'.
+        hub_count:          Number of hub nodes (default 2).
+        spoke_count:        Number of spoke nodes (default 4).
+        endpoint_per_spoke: Endpoints per spoke (default 2).
+        hub_names:          Override hub hostnames.
+        spoke_names:        Override spoke hostnames.
+        endpoint_names:     Override endpoint hostnames (flat list, len = spoke_count × endpoint_per_spoke).
+        site:               Site label for all devices.
+        style_profile:      Visual style profile.
+
+    Returns:
+        JSON summary string on success, or "ERROR: ..." on failure.
+    """
+    try:
+        import json as _j
+        from styles import resolve_node_style, resolve_edge_style
+
+        # ── mode config ───────────────────────────────────────────────────────
+        mode = (mode or "tenant_fabric").lower().strip()
+        if mode not in ("tenant_fabric", "wan_branch"):
+            return f"ERROR: Unsupported mode '{mode}'. Use 'tenant_fabric' or 'wan_branch'."
+
+        if mode == "tenant_fabric":
+            hub_role      = "spine"
+            spoke_role    = "leaf"
+            endpoint_role = "compute_node"
+            hub_prefix    = "hub"
+            spoke_prefix  = "spoke"
+            ep_prefix     = "compute"
+            hub_link_type = "fabric"
+            ep_link_type  = "uplink"
+        else:  # wan_branch
+            hub_role      = "wan_router"
+            spoke_role    = "branch_router"
+            endpoint_role = "compute_node"
+            hub_prefix    = "wan-hub"
+            spoke_prefix  = "branch"
+            ep_prefix     = "endpoint"
+            hub_link_type = "wan"
+            ep_link_type  = "uplink"
+
+        # ── name generation ───────────────────────────────────────────────────
+        hubs    = hub_names    or [f"{hub_prefix}{i+1:02d}"   for i in range(hub_count)]
+        spokes  = spoke_names  or [f"{spoke_prefix}{i+1:02d}" for i in range(spoke_count)]
+        total_ep = spoke_count * endpoint_per_spoke
+        eps_flat = endpoint_names or [
+            f"{ep_prefix}{i+1:02d}" for i in range(total_ep)
+        ]
+        # Group endpoints per spoke
+        eps = [eps_flat[i * endpoint_per_spoke:(i + 1) * endpoint_per_spoke]
+               for i in range(spoke_count)]
+
+        # ── layout constants ──────────────────────────────────────────────────
+        NODE_W       = 120;  NODE_H  = 60
+        H_GAP        = 160;  V_GAP   = 160
+        MARGIN_X     = 100;  MARGIN_Y = 80
+
+        hub_y    = MARGIN_Y
+        spoke_y  = hub_y   + NODE_H + V_GAP
+        ep_y     = spoke_y + NODE_H + V_GAP
+
+        hub_total_w   = hub_count   * NODE_W + (hub_count   - 1) * H_GAP
+        spoke_total_w = spoke_count * NODE_W + (spoke_count - 1) * H_GAP
+        canvas_w      = max(hub_total_w, spoke_total_w) + MARGIN_X * 2
+
+        hub_start_x   = (canvas_w - hub_total_w)   // 2
+        spoke_start_x = (canvas_w - spoke_total_w) // 2
+
+        # ── create diagram ────────────────────────────────────────────────────
+        write_file(path, blank_template("Hub-Spoke"))
+        hub_ids   : dict[str, str] = {}
+        spoke_ids : dict[str, str] = {}
+        ep_ids    : dict[str, str] = {}
+
+        for i, name in enumerate(hubs):
+            x = hub_start_x + i * (NODE_W + H_GAP)
+            cid = add_device(
+                path=path, hostname=name, role=hub_role,
+                x=x, y=hub_y, width=NODE_W, height=NODE_H,
+                site=site, style_profile=style_profile,
+            )
+            hub_ids[name] = cid
+
+        for i, name in enumerate(spokes):
+            x = spoke_start_x + i * (NODE_W + H_GAP)
+            cid = add_device(
+                path=path, hostname=name, role=spoke_role,
+                x=x, y=spoke_y, width=NODE_W, height=NODE_H,
+                site=site, style_profile=style_profile,
+            )
+            spoke_ids[name] = cid
+
+            ep_total_w = endpoint_per_spoke * NODE_W + (endpoint_per_spoke - 1) * H_GAP
+            ep_start_x = x + (NODE_W - ep_total_w) // 2
+            for j, ep_name in enumerate(eps[i]):
+                ex = ep_start_x + j * (NODE_W + H_GAP)
+                ecid = add_device(
+                    path=path, hostname=ep_name, role=endpoint_role,
+                    x=ex, y=ep_y, width=NODE_W, height=NODE_H,
+                    site=site, style_profile=style_profile,
+                )
+                ep_ids[ep_name] = ecid
+
+        # ── links: hub full-mesh to each spoke ────────────────────────────────
+        edge_style = resolve_edge_style(hub_link_type)
+        link_count = 0
+        for h_name, h_id in hub_ids.items():
+            for s_name, s_id in spoke_ids.items():
+                insert_edge(path, h_id, s_id, label="", style=edge_style)
+                link_count += 1
+
+        # ── links: spoke to its endpoints ─────────────────────────────────────
+        ep_style = resolve_edge_style(ep_link_type)
+        for i, s_name in enumerate(spokes):
+            s_id = spoke_ids[s_name]
+            for ep_name in eps[i]:
+                insert_edge(path, s_id, ep_ids[ep_name], label="", style=ep_style)
+                link_count += 1
+
+        total_nodes = len(hub_ids) + len(spoke_ids) + len(ep_ids)
+        return _j.dumps({
+            "status":        "ok",
+            "warnings":      [],
+            "mode":          mode,
+            "hub_count":     len(hub_ids),
+            "spoke_count":   len(spoke_ids),
+            "endpoint_count": len(ep_ids),
+            "node_count":    total_nodes,
+            "link_count":    link_count,
+            "total_cells":   total_nodes + link_count,
+        }, indent=2)
+
+    except Exception as exc:
+        return f"ERROR: {exc}"
+
+
+def build_security_stack(
+    path:              str,
+    firewall_count:    int        = 2,
+    lb_count:          int        = 2,
+    app_count:         int        = 4,
+    db_count:          int        = 2,
+    include_internet:  bool       = True,
+    include_lb:        bool       = True,
+    monitoring_count:  int        = 1,
+    firewall_names:    list[str]  | None = None,
+    lb_names:          list[str]  | None = None,
+    app_names:         list[str]  | None = None,
+    db_names:          list[str]  | None = None,
+    monitoring_names:  list[str]  | None = None,
+    site:              str        = "",
+    style_profile:     str        = "minimal",
+) -> str:
+    """
+    Build a security-zone stack diagram with configurable tiers.
+
+    Tiers (top to bottom):
+        -1  Internet gateway        (optional — include_internet)
+         0  Firewall HA pair
+         1  Load balancers          (optional — include_lb)
+         2  Application servers
+         3  Database / storage
+         Sidebar  Monitoring nodes
+
+    Tier -1 to 0 linked with WAN style.
+    Tiers 0→1, 1→2 linked with fabric style.
+    Tiers 2→3 linked with uplink style.
+    Monitoring sidebar connected to firewall with management style.
+
+    Args:
+        path:             Full path to write the .drawio file.
+        firewall_count:   Number of firewalls (default 2, HA pair).
+        lb_count:         Number of load balancers (default 2).
+        app_count:        Number of application servers (default 4).
+        db_count:         Number of database nodes (default 2).
+        include_internet: Add an internet gateway node at top (default True).
+        include_lb:       Include the load balancer tier (default True).
+        monitoring_count: Number of monitoring nodes in sidebar (default 1).
+        firewall_names:   Override firewall hostnames.
+        lb_names:         Override load balancer hostnames.
+        app_names:        Override application server hostnames.
+        db_names:         Override database node hostnames.
+        monitoring_names: Override monitoring node hostnames.
+        site:             Site label for all devices.
+        style_profile:    Visual style profile.
+
+    Returns:
+        JSON summary string on success, or "ERROR: ..." on failure.
+    """
+    try:
+        import json as _j
+        from styles import resolve_edge_style
+
+        # ── name generation ───────────────────────────────────────────────────
+        fw_names  = firewall_names   or [f"fw{i+1:02d}"      for i in range(firewall_count)]
+        lbs       = lb_names         or [f"lb{i+1:02d}"      for i in range(lb_count)]
+        apps      = app_names        or [f"app{i+1:02d}"     for i in range(app_count)]
+        dbs       = db_names         or [f"db{i+1:02d}"      for i in range(db_count)]
+        mons      = monitoring_names or [f"monitor{i+1:02d}" for i in range(monitoring_count)]
+
+        # ── layout constants ──────────────────────────────────────────────────
+        NODE_W   = 120;  NODE_H  = 60
+        H_GAP    = 160;  V_GAP   = 140
+        MARGIN_X = 100;  MARGIN_Y = 80
+        SIDEBAR_X_OFFSET = 200  # extra gap to sidebar
+
+        def _row_x(count: int, canvas_w: int) -> int:
+            total = count * NODE_W + (count - 1) * H_GAP
+            return (canvas_w - total) // 2
+
+        # Compute canvas width from widest tier
+        all_counts = [firewall_count, app_count, db_count]
+        if include_lb:
+            all_counts.append(lb_count)
+        max_count  = max(all_counts)
+        canvas_w   = max_count * NODE_W + (max_count - 1) * H_GAP + MARGIN_X * 2
+        sidebar_x  = canvas_w + SIDEBAR_X_OFFSET
+
+        write_file(path, blank_template("Security Stack"))
+
+        all_ids:  dict[str, str] = {}
+        tiers:    dict[str, list[str]] = {}   # tier_key → list of hostnames
+
+        def _add_row(names: list[str], role: str, y: int) -> list[str]:
+            row_ids = []
+            rx = _row_x(len(names), canvas_w)
+            for i, name in enumerate(names):
+                x = rx + i * (NODE_W + H_GAP)
+                cid = add_device(
+                    path=path, hostname=name, role=role,
+                    x=x, y=y, width=NODE_W, height=NODE_H,
+                    site=site, style_profile=style_profile,
+                )
+                all_ids[name] = cid
+                row_ids.append(name)
+            return row_ids
+
+        current_y = MARGIN_Y
+
+        # Tier -1: Internet
+        if include_internet:
+            inet_name = "internet"
+            inet_id   = add_device(
+                path=path, hostname=inet_name, role="internet",
+                x=_row_x(1, canvas_w), y=current_y,
+                width=NODE_W, height=NODE_H,
+                site=site, style_profile=style_profile,
+            )
+            all_ids[inet_name] = inet_id
+            tiers["internet"] = [inet_name]
+            current_y += NODE_H + V_GAP
+
+        # Tier 0: Firewalls
+        tiers["firewall"] = _add_row(fw_names, "firewall", current_y)
+        current_y += NODE_H + V_GAP
+
+        # Tier 1: Load balancers (optional)
+        if include_lb:
+            tiers["lb"] = _add_row(lbs, "load_balancer", current_y)
+            current_y += NODE_H + V_GAP
+
+        # Tier 2: Application servers
+        tiers["app"] = _add_row(apps, "application_server", current_y)
+        current_y += NODE_H + V_GAP
+
+        # Tier 3: Databases
+        tiers["db"] = _add_row(dbs, "database_node", current_y)
+
+        # Sidebar: Monitoring
+        if monitoring_count > 0:
+            mon_y = MARGIN_Y + NODE_H + V_GAP   # same height as firewalls
+            for i, name in enumerate(mons):
+                cid = add_device(
+                    path=path, hostname=name, role="monitoring_node",
+                    x=sidebar_x, y=mon_y + i * (NODE_H + 40),
+                    width=NODE_W, height=NODE_H,
+                    site=site, style_profile=style_profile,
+                )
+                all_ids[name] = cid
+            tiers["monitoring"] = mons
+
+        # ── wiring ────────────────────────────────────────────────────────────
+        link_count = 0
+
+        def _connect_tiers(a_names: list[str], b_names: list[str], link_type: str):
+            nonlocal link_count
+            style = resolve_edge_style(link_type)
+            for a in a_names:
+                for b in b_names:
+                    insert_edge(path, all_ids[a], all_ids[b], label="", style=style)
+                    link_count += 1
+
+        if include_internet and "internet" in tiers:
+            _connect_tiers(tiers["internet"], tiers["firewall"], "wan")
+
+        if include_lb and "lb" in tiers:
+            _connect_tiers(tiers["firewall"], tiers["lb"],       "fabric")
+            _connect_tiers(tiers["lb"],       tiers["app"],      "fabric")
+        else:
+            _connect_tiers(tiers["firewall"], tiers["app"],      "fabric")
+
+        _connect_tiers(tiers["app"], tiers["db"], "uplink")
+
+        if monitoring_count > 0 and "monitoring" in tiers:
+            _connect_tiers(tiers["monitoring"], tiers["firewall"], "management")
+
+        total_nodes = len(all_ids)
+        return _j.dumps({
+            "status":         "ok",
+            "warnings":       [],
+            "include_internet": include_internet,
+            "include_lb":     include_lb,
+            "firewall_count": len(tiers.get("firewall", [])),
+            "lb_count":       len(tiers.get("lb", [])),
+            "app_count":      len(tiers.get("app", [])),
+            "db_count":       len(tiers.get("db", [])),
+            "monitoring_count": len(tiers.get("monitoring", [])),
+            "node_count":     total_nodes,
+            "link_count":     link_count,
+            "total_cells":    total_nodes + link_count,
+        }, indent=2)
+
+    except Exception as exc:
+        return f"ERROR: {exc}"

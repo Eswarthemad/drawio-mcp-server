@@ -35,7 +35,10 @@ DEFAULT_TOPOLOGY: str = "spine_leaf"
 WARN_TOPOLOGY_DEFAULTED: str = "W001"
 
 #: Supported topology identifiers. Extend this as new builders are added.
-SUPPORTED_TOPOLOGIES: set[str] = {"spine_leaf"}
+SUPPORTED_TOPOLOGIES: set[str] = {"spine_leaf", "hub_spoke", "security_stack"}
+
+#: Supported hub-spoke sub-modes.
+SUPPORTED_HUB_SPOKE_MODES: set[str] = {"tenant_fabric", "wan_branch"}
 
 #: Default style profile when none is specified.
 DEFAULT_STYLE_PROFILE: str = "minimal"
@@ -59,16 +62,19 @@ class DiagramMeta:
     Top-level metadata block from the YAML ``meta:`` section.
 
     Attributes:
-        name:          Human-readable diagram name.
-        topology:      Topology type key (e.g. 'spine_leaf').
-                       Defaults to DEFAULT_TOPOLOGY if not supplied.
-        style_profile: Visual style profile key.
-                       Defaults to DEFAULT_STYLE_PROFILE if not supplied.
+        name:              Human-readable diagram name.
+        topology:          Topology type key (e.g. 'spine_leaf', 'hub_spoke').
+                           Defaults to DEFAULT_TOPOLOGY if not supplied.
+        topology_mode:     Sub-mode for topologies that support it.
+                           E.g. 'tenant_fabric' or 'wan_branch' for hub_spoke.
+        style_profile:     Visual style profile key.
+                           Defaults to DEFAULT_STYLE_PROFILE if not supplied.
         topology_defaulted: True if topology was not declared in the YAML
                             and was defaulted. Triggers a W001 warning.
     """
     name:               str  = "Untitled Diagram"
     topology:           str  = DEFAULT_TOPOLOGY
+    topology_mode:      str  = ""
     style_profile:      str  = DEFAULT_STYLE_PROFILE
     topology_defaulted: bool = False
 
@@ -126,20 +132,43 @@ class Link:
 
 
 @dataclass
+class Container:
+    """
+    A labelled container group that visually groups devices.
+
+    Attributes:
+        name:    Container identifier — used as label and reference key.
+        label:   Display label (defaults to name if not set).
+        members: List of device hostnames that belong to this container.
+        style:   Optional explicit draw.io container style.
+    """
+    name:    str
+    label:   str         = ""
+    members: list[str]   = field(default_factory=list)
+    style:   str         = ""
+
+    def __post_init__(self) -> None:
+        if not self.label:
+            self.label = self.name
+
+
+@dataclass
 class TopologyModel:
     """
     The complete parsed topology — one-to-one with a valid YAML file.
 
     Attributes:
-        meta:    Diagram metadata.
-        sites:   List of declared sites.
-        devices: List of network devices.
-        links:   List of network links.
+        meta:       Diagram metadata.
+        sites:      List of declared sites.
+        devices:    List of network devices.
+        links:      List of network links.
+        containers: List of container groups.
     """
-    meta:    DiagramMeta        = field(default_factory=DiagramMeta)
-    sites:   list[Site]         = field(default_factory=list)
-    devices: list[Device]       = field(default_factory=list)
-    links:   list[Link]         = field(default_factory=list)
+    meta:       DiagramMeta        = field(default_factory=DiagramMeta)
+    sites:      list[Site]         = field(default_factory=list)
+    devices:    list[Device]       = field(default_factory=list)
+    links:      list[Link]         = field(default_factory=list)
+    containers: list[Container]    = field(default_factory=list)
 
 
 # ==============================================================================
@@ -177,9 +206,10 @@ def load_model(yaml_path: str) -> TopologyModel:
     topology_declared  = "topology" in raw_meta
 
     meta = DiagramMeta(
-        name          = str(raw_meta.get("name", "Untitled Diagram")),
-        topology      = str(raw_meta.get("topology", DEFAULT_TOPOLOGY)).lower().strip(),
-        style_profile = str(raw_meta.get("style_profile", DEFAULT_STYLE_PROFILE)).lower().strip(),
+        name               = str(raw_meta.get("name", "Untitled Diagram")),
+        topology           = str(raw_meta.get("topology", DEFAULT_TOPOLOGY)).lower().strip(),
+        topology_mode      = str(raw_meta.get("topology_mode", "")).lower().strip(),
+        style_profile      = str(raw_meta.get("style_profile", DEFAULT_STYLE_PROFILE)).lower().strip(),
         topology_defaulted = not topology_declared,
     )
 
@@ -217,4 +247,16 @@ def load_model(yaml_path: str) -> TopologyModel:
         if lnk and lnk.get("a") and lnk.get("b")
     ]
 
-    return TopologyModel(meta=meta, sites=sites, devices=devices, links=links)
+    # ── containers ───────────────────────────────────────────────────────────
+    containers = [
+        Container(
+            name    = str(c.get("name", "")),
+            label   = str(c.get("label", c.get("name", ""))),
+            members = [str(m) for m in (c.get("members") or [])],
+            style   = str(c.get("style", "")),
+        )
+        for c in (raw.get("containers") or [])
+        if c and c.get("name")
+    ]
+
+    return TopologyModel(meta=meta, sites=sites, devices=devices, links=links, containers=containers)
