@@ -1,4 +1,10 @@
 # drawio-mcp-server
+# drawio-mcp-server
+
+[![CI](https://github.com/Eswarthemad/drawio-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/Eswarthemad/drawio-mcp-server/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
+[![License](https://img.shields.io/github/license/Eswarthemad/drawio-mcp-server)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Eswarthemad/drawio-mcp-server)](https://github.com/Eswarthemad/drawio-mcp-server/releases)
 
 A Python **Model Context Protocol (MCP) server** for generating and maintaining **draw.io architecture diagrams programmatically**.
 
