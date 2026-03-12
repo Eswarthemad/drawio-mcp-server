@@ -16,11 +16,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from models import (
     load_model,
     TopologyModel,
-    DiagramMeta,
-    Device,
-    Link,
-    Site,
-    Container,
     DEFAULT_TOPOLOGY,
     DEFAULT_STYLE_PROFILE,
     SUPPORTED_TOPOLOGIES,

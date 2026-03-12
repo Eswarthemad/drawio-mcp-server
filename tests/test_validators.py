@@ -5,7 +5,6 @@ Unit tests for validators.py — every error code and warning code.
 
 import sys
 import os
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -440,7 +439,6 @@ class TestFullCollection:
         )
         result = validate(model)
         assert result.ok is False
-        error_codes = {e.code for e in result.errors}
         # Must collect all, not short-circuit
         assert len(result.errors) >= 3
 

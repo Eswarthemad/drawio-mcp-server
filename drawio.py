@@ -387,10 +387,14 @@ def modify_node(
 
         geo = cell.find("mxGeometry")
         if geo is not None:
-            if x      is not None: geo.set("x",      str(x))
-            if y      is not None: geo.set("y",      str(y))
-            if width  is not None: geo.set("width",  str(width))
-            if height is not None: geo.set("height", str(height))
+            if x      is not None: 
+                geo.set("x",      str(x))
+            if y      is not None: 
+                geo.set("y",      str(y))
+            if width  is not None: 
+                geo.set("width",  str(width))
+            if height is not None: 
+                geo.set("height", str(height))
 
         save_diagram(tree, path)
         return f"Updated cell id={cell_id}"
@@ -1214,8 +1218,10 @@ def group_nodes(
             cy = float(geo.get("y", 0))
             cw = float(geo.get("width",  120))
             ch = float(geo.get("height", 60))
-            xs.append(cx);  ys.append(cy)
-            x2s.append(cx + cw); y2s.append(cy + ch)
+            xs.append(cx)
+            ys.append(cy)
+            x2s.append(cx + cw)
+            y2s.append(cy + ch)
 
         if not xs:
             return "ERROR: No positioned cells found in provided IDs."
@@ -1304,7 +1310,7 @@ def build_hub_spoke(
     """
     try:
         import json as _j
-        from styles import resolve_node_style, resolve_edge_style
+        from styles import resolve_edge_style
 
         # ── mode config ───────────────────────────────────────────────────────
         mode = (mode or "tenant_fabric").lower().strip()
@@ -1342,9 +1348,12 @@ def build_hub_spoke(
                for i in range(spoke_count)]
 
         # ── layout constants ──────────────────────────────────────────────────
-        NODE_W       = 120;  NODE_H  = 60
-        H_GAP        = 160;  V_GAP   = 160
-        MARGIN_X     = 100;  MARGIN_Y = 80
+        NODE_W       = 120
+        NODE_H  = 60
+        H_GAP        = 160
+        V_GAP   = 160
+        MARGIN_X     = 100
+        MARGIN_Y = 80
 
         hub_y    = MARGIN_Y
         spoke_y  = hub_y   + NODE_H + V_GAP
@@ -1490,9 +1499,12 @@ def build_security_stack(
         mons      = monitoring_names or [f"monitor{i+1:02d}" for i in range(monitoring_count)]
 
         # ── layout constants ──────────────────────────────────────────────────
-        NODE_W   = 120;  NODE_H  = 60
-        H_GAP    = 160;  V_GAP   = 140
-        MARGIN_X = 100;  MARGIN_Y = 80
+        NODE_W   = 120
+        NODE_H  = 60
+        H_GAP    = 160
+        V_GAP   = 140
+        MARGIN_X = 100
+        MARGIN_Y = 80
         SIDEBAR_X_OFFSET = 200  # extra gap to sidebar
 
         def _row_x(count: int, canvas_w: int) -> int:

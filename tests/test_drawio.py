@@ -315,7 +315,7 @@ class TestBuildSpineLeaf:
 
     def test_node_count_correct(self, tmp_dir):
         path = os.path.join(tmp_dir, "sl.drawio")
-        result = json.loads(
+        json.loads(
             drawio.build_spine_leaf_fabric(path, spine_count=2, leaf_count=4, compute_per_leaf=2)
         )
         nodes = json.loads(drawio.get_nodes(path))
