@@ -68,6 +68,7 @@ ROLE_LAYER: dict[str, int | str] = {
     "management_switch":  "sidebar",
     "monitoring_node":    "sidebar",
 }
+SUPPORTED_INTERCONNECT_TYPES = {"evpn", "vxlan", "ospf", "bgp", "static"}
 
 #: Default style used when a role/profile lookup produces no result.
 DEFAULT_STYLE: str = "rounded=1;whiteSpace=wrap;html=1;"
@@ -941,7 +942,275 @@ def build_spine_leaf_fabric(
     except Exception as e:
         return f"ERROR: {e}"
 
-
+import xml.etree.ElementTree as ET
+import json, os
+ 
+def build_multi_site(
+    path: str,
+    sites: list | None = None,
+    interconnect_type: str = "evpn",
+    dci_nodes: int = 2,
+    style_profile: str = "minimal",
+) -> str:
+    """
+    Build a multi-site spine-leaf fabric diagram with an EVPN/DCI interconnect band.
+ 
+    Layout (vertical stack, top → bottom):
+        Site 1 container  (spine row + leaf row)
+        EVPN Interconnect band  (DCI / Route-Reflector nodes)
+        Site 2 container  (spine row + leaf row)
+        ... repeat for N sites
+ 
+    Args:
+        path:              Output .drawio file path.
+        sites:             List of dicts:
+                             [{"name": "dc1", "spines": 2, "leafs": 4, "compute_per_leaf": 0}]
+                           Defaults to two sites (dc1, dc2) with 2 spines + 4 leafs each.
+        interconnect_type: "evpn" | "vxlan" | "ospf" | "bgp" | "static"
+        dci_nodes:         Number of DCI / RR nodes in each interconnect band.
+        style_profile:     Style profile (minimal | enterprise | dark | vendor-neutral).
+ 
+    Returns:
+        JSON summary string.
+    """
+    if interconnect_type not in SUPPORTED_INTERCONNECT_TYPES:
+        return f"ERROR: Unsupported interconnect type '{interconnect_type}'. " \
+               f"Supported: {', '.join(sorted(SUPPORTED_INTERCONNECT_TYPES))}."
+ 
+    if sites is None:
+        sites = [
+            {"name": "dc1", "spines": 2, "leafs": 4, "compute_per_leaf": 0},
+            {"name": "dc2", "spines": 2, "leafs": 4, "compute_per_leaf": 0},
+        ]
+ 
+    # ── layout constants ──
+    PAGE_W       = 1640
+    NODE_W       = 140
+    NODE_H       = 55
+    H_GAP        = 40        # horizontal gap between nodes in a row
+    V_GAP        = 100       # vertical gap spine→leaf rows
+    SITE_PAD_X   = 80        # horizontal padding inside site container
+    SITE_PAD_TOP = 60        # below title bar
+    SITE_PAD_BOT = 40
+    TITLE_H      = 32
+    EVPN_H       = 140       # height of interconnect band
+    SITE_MARGIN  = 50        # vertical gap between containers
+    LEFT_MARGIN  = 60
+ 
+    # ── style profiles ──
+    _SITE_COLORS = [
+        ("#d5e8d4", "#82b366", "#4d7c3f"),   # green  — DC1
+        ("#dae8fc", "#6c8ebf", "#3a5f8a"),   # blue   — DC2
+        ("#e1d5e7", "#9673a6", "#6a4c82"),   # purple — DC3
+        ("#fff2cc", "#d6b656", "#a68a00"),   # yellow — DC4
+    ]
+    _SPINE_FILLS  = ["#82b366", "#6c8ebf", "#9673a6", "#d6b656"]
+    _SPINE_FONTS  = ["#ffffff", "#ffffff", "#ffffff", "#000000"]
+    _EVPN_BG      = "#d79b00"
+    _EVPN_STROKE  = "#BD7000"
+    _DCI_FILL     = "#ffe6cc"
+    _DCI_STROKE   = "#d79b00"
+ 
+    # ── compute site dimensions ──
+    def site_width(s: dict) -> int:
+        max_cols = max(s.get("spines", 2), s.get("leafs", 4))
+        return max_cols * NODE_W + (max_cols - 1) * H_GAP + 2 * SITE_PAD_X
+ 
+    def site_height(s: dict) -> int:
+        has_compute = s.get("compute_per_leaf", 0) > 0
+        layers = 3 if has_compute else 2
+        return TITLE_H + SITE_PAD_TOP + NODE_H + (layers - 1) * (V_GAP + NODE_H) + SITE_PAD_BOT
+ 
+    max_w     = max(site_width(s) for s in sites)
+    canvas_w  = max(max_w + 2 * LEFT_MARGIN, PAGE_W)
+ 
+    # ── build XML tree ──
+    graph = ET.Element("mxGraphModel", {
+        "dx": "1422", "dy": "762", "grid": "1", "gridSize": "10",
+        "pageWidth": str(canvas_w), "pageHeight": "2000",
+    })
+    root_el = ET.SubElement(graph, "root")
+    ET.SubElement(root_el, "mxCell", {"id": "0"})
+    ET.SubElement(root_el, "mxCell", {"id": "1", "parent": "0"})
+ 
+    id_counter = [100]
+    def next_id(prefix: str = "") -> str:
+        id_counter[0] += 1
+        return f"{prefix}{id_counter[0]}"
+ 
+    def geo(x, y, w, h) -> ET.Element:
+        el = ET.Element("mxGeometry", {"x": str(x), "y": str(y), "width": str(w), "height": str(h), "as": "geometry"})
+        return el
+ 
+    def add_vertex(parent_id, cell_id, label, x, y, w, h, style) -> str:
+        cell = ET.SubElement(root_el, "mxCell", {
+            "id": cell_id, "value": label, "style": style,
+            "vertex": "1", "parent": parent_id,
+        })
+        cell.append(geo(x, y, w, h))
+        return cell_id
+ 
+    def add_edge(parent_id, src, tgt, style) -> str:
+        eid = next_id("e")
+        cell = ET.SubElement(root_el, "mxCell", {
+            "id": eid, "value": "", "style": style,
+            "edge": "1", "source": src, "target": tgt, "parent": parent_id,
+        })
+        cell.append(ET.Element("mxGeometry", {"relative": "1", "as": "geometry"}))
+        return eid
+ 
+    # ── tracking ──
+    all_site_spine_ids: list[list[str]] = []   # per-site list of spine cell IDs
+    dci_ids_per_band:   list[list[str]] = []   # per-interconnect-band DCI node IDs
+ 
+    y_cursor = 50
+ 
+    for idx, s in enumerate(sites):
+        site_name = s.get("name", f"site{idx+1}")
+        n_spines  = max(1, s.get("spines", 2))
+        n_leafs   = max(1, s.get("leafs", 4))
+        cpl       = s.get("compute_per_leaf", 0)
+ 
+        fill, stroke, dark = _SITE_COLORS[idx % len(_SITE_COLORS)]
+        spine_fill = _SPINE_FILLS[idx % len(_SPINE_FILLS)]
+        spine_font = _SPINE_FONTS[idx % len(_SPINE_FONTS)]
+ 
+        sw = site_width(s)
+        sh = site_height(s)
+        sx = LEFT_MARGIN + (canvas_w - 2 * LEFT_MARGIN - sw) // 2
+ 
+        site_id = next_id(f"site_{site_name}_")
+        add_vertex("1", site_id,
+                   f"{site_name.upper()} — Spine-Leaf Fabric",
+                   sx, y_cursor, sw, sh,
+                   f"swimlane;startSize={TITLE_H};fillColor={fill};strokeColor={stroke};"
+                   f"strokeWidth=3;fontStyle=1;fontSize=13;container=1;collapsible=0;whiteSpace=wrap;html=1;")
+ 
+        # spine row — centered
+        spine_row_w = n_spines * NODE_W + (n_spines - 1) * H_GAP
+        spine_start = (sw - spine_row_w) // 2
+        spine_y     = TITLE_H + SITE_PAD_TOP
+        spine_ids   = []
+        for i in range(n_spines):
+            sid = next_id(f"{site_name}_sp")
+            sx_ = spine_start + i * (NODE_W + H_GAP)
+            add_vertex(site_id, sid,
+                       f"{site_name}-spine-{i+1:02d}",
+                       sx_, spine_y, NODE_W, NODE_H,
+                       f"rounded=1;whiteSpace=wrap;html=1;fillColor={spine_fill};"
+                       f"strokeColor={dark};fontColor={spine_font};fontStyle=1;")
+            spine_ids.append(sid)
+        all_site_spine_ids.append(spine_ids)
+ 
+        # leaf row — centered
+        leaf_row_w = n_leafs * NODE_W + (n_leafs - 1) * H_GAP
+        leaf_start = (sw - leaf_row_w) // 2
+        leaf_y     = spine_y + NODE_H + V_GAP
+        leaf_ids   = []
+        for i in range(n_leafs):
+            lid = next_id(f"{site_name}_lf")
+            lx_ = leaf_start + i * (NODE_W + H_GAP)
+            add_vertex(site_id, lid,
+                       f"{site_name}-leaf-{i+1:02d}",
+                       lx_, leaf_y, NODE_W, NODE_H,
+                       f"rounded=1;whiteSpace=wrap;html=1;fillColor={fill};strokeColor={stroke};")
+            leaf_ids.append(lid)
+ 
+        # compute row (optional)
+        if cpl > 0:
+            compute_y = leaf_y + NODE_H + V_GAP
+            for li, lid_ in enumerate(leaf_ids):
+                for ci in range(cpl):
+                    # place compute under each leaf
+                    total_c_w = cpl * (NODE_W - 20) + (cpl - 1) * 10
+                    c_start   = leaf_start + li * (NODE_W + H_GAP) + (NODE_W - total_c_w) // 2
+                    cid = next_id(f"{site_name}_cmp")
+                    add_vertex(site_id, cid,
+                               f"{site_name}-compute-{li+1:02d}-{ci+1:02d}",
+                               c_start + ci * ((NODE_W - 20) + 10),
+                               compute_y, NODE_W - 20, NODE_H - 10,
+                               f"rounded=1;whiteSpace=wrap;html=1;fillColor={fill};"
+                               f"strokeColor={stroke};fontSize=9;")
+                    # leaf → compute link
+                    add_edge(site_id, lid_, cid,
+                             f"edgeStyle=orthogonalEdgeStyle;strokeColor={stroke};strokeWidth=1;")
+ 
+        # spine → leaf full-mesh links (inside site container)
+        for sp_id in spine_ids:
+            for lf_id in leaf_ids:
+                add_edge(site_id, sp_id, lf_id,
+                         f"edgeStyle=orthogonalEdgeStyle;strokeColor={stroke};strokeWidth=2;")
+ 
+        y_cursor += sh + SITE_MARGIN
+ 
+        # ── EVPN interconnect band (between consecutive sites) ──
+        if idx < len(sites) - 1:
+            band_id = next_id("evpn_band_")
+            ic_label = interconnect_type.upper()
+            add_vertex("1", band_id,
+                       f"{ic_label} / DCI Interconnect",
+                       sx, y_cursor, sw, EVPN_H,
+                       f"swimlane;startSize={TITLE_H};fillColor={_EVPN_BG};"
+                       f"strokeColor={_EVPN_STROKE};strokeWidth=3;fontStyle=1;fontSize=13;"
+                       f"fontColor=#ffffff;container=1;collapsible=0;whiteSpace=wrap;html=1;")
+ 
+            # DCI nodes inside band
+            dci_row_w  = dci_nodes * (NODE_W + 20) + (dci_nodes - 1) * H_GAP
+            dci_start  = (sw - dci_row_w) // 2
+            dci_y_in   = TITLE_H + (EVPN_H - TITLE_H - NODE_H) // 2
+            dci_ids    = []
+            for di in range(dci_nodes):
+                did = next_id("dci_")
+                add_vertex(band_id, did,
+                           f"RR{di+1} / DCI-{di+1:02d}\n(BGP Route Reflector)",
+                           dci_start + di * (NODE_W + 20 + H_GAP),
+                           dci_y_in, NODE_W + 20, NODE_H,
+                           f"rounded=1;whiteSpace=wrap;html=1;fillColor={_DCI_FILL};"
+                           f"strokeColor={_DCI_STROKE};fontStyle=1;fontSize=10;")
+                dci_ids.append(did)
+            dci_ids_per_band.append(dci_ids)
+ 
+            # peer link between DCI nodes
+            if len(dci_ids) >= 2:
+                add_edge(band_id, dci_ids[0], dci_ids[-1],
+                         f"edgeStyle=orthogonalEdgeStyle;strokeColor={_EVPN_STROKE};"
+                         f"strokeWidth=2;dashed=1;")
+ 
+            y_cursor += EVPN_H + SITE_MARGIN
+ 
+    # ── cross-site uplinks: site spines ↔ DCI nodes (parent="1") ──
+    ic_edge_style = (
+        f"edgeStyle=orthogonalEdgeStyle;strokeColor={_EVPN_BG};"
+        f"strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;"
+    )
+    for band_idx, dci_ids in enumerate(dci_ids_per_band):
+        upper_spines = all_site_spine_ids[band_idx]
+        lower_spines = all_site_spine_ids[band_idx + 1]
+ 
+        # upper spines → DCI nodes
+        for i, sp in enumerate(upper_spines):
+            target_dci = dci_ids[i % len(dci_ids)]
+            add_edge("1", sp, target_dci, ic_edge_style)
+ 
+        # DCI nodes → lower spines
+        for i, sp in enumerate(lower_spines):
+            source_dci = dci_ids[i % len(dci_ids)]
+            add_edge("1", source_dci, sp, ic_edge_style)
+ 
+    # ── write file ──
+    tree = ET.ElementTree(graph)
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    tree.write(path, encoding="unicode", xml_declaration=False)
+ 
+    return json.dumps({
+        "status":             "ok",
+        "path":               path,
+        "sites":              [s.get("name") for s in sites],
+        "interconnect_type":  interconnect_type,
+        "dci_nodes_per_band": dci_nodes,
+        "total_nodes":        id_counter[0] - 100,
+    }, indent=2)
+ 
 # ==============================================================================
 # PHASE 3 — DIAGRAM FROM MODEL
 # ==============================================================================
@@ -1095,6 +1364,33 @@ def build_diagram_from_model(path: str, yaml_path: str) -> str:
             monitoring_names=mons or None,
             site=model.sites[0].name if model.sites else "",
             style_profile=model.meta.style_profile,
+        )
+        if build_result_str.startswith("ERROR"):
+            return _json.dumps({
+                "status":   "error",
+                "errors":   [{"code": "E097", "field": "build", "message": build_result_str}],
+                "warnings": result.to_dict()["warnings"],
+            }, indent=2)
+        build_summary = _json.loads(build_result_str)
+        build_summary["warnings"] = result.to_dict()["warnings"]
+        return _json.dumps(build_summary, indent=2)
+
+    # ── multi_site dispatch ───────────────────────────────────────────────────
+    if topology == "multi_site":
+        build_result_str = build_multi_site(
+            path              = path,
+            sites             = [
+                {
+                    "name":             s.name,
+                    "spines":           s.spines,
+                    "leafs":            s.leafs,
+                    "compute_per_leaf": s.compute_per_leaf,
+                }
+                for s in model.site_specs
+            ],
+            interconnect_type = model.interconnect.type,
+            dci_nodes         = model.interconnect.dci_nodes,
+            style_profile     = model.meta.style_profile,
         )
         if build_result_str.startswith("ERROR"):
             return _json.dumps({

@@ -8,12 +8,15 @@ modules — everything flows as typed objects.
 
 Public API
 ----------
-    DiagramMeta       — top-level diagram metadata (name, topology, style)
-    Site              — a named site/location
-    Device            — a network device with role and metadata
-    Link              — a connection between two devices
-    TopologyModel     — the complete parsed topology (meta + sites + devices + links)
-    load_model(path)  — parse a YAML file into a TopologyModel
+    DiagramMeta         — top-level diagram metadata (name, topology, style)
+    Site                — a named site/location
+    Device              — a network device with role and metadata
+    Link                — a connection between two devices
+    Container           — a labelled container group
+    SiteSpec            — site spec for multi-site topology
+    InterconnectSpec    — DCI/interconnect spec for multi-site topology
+    TopologyModel       — the complete parsed topology
+    load_model(path)    — parse a YAML file into a TopologyModel
 """
 
 from __future__ import annotations
@@ -34,7 +37,12 @@ DEFAULT_TOPOLOGY: str = "spine_leaf"
 WARN_TOPOLOGY_DEFAULTED: str = "W001"
 
 #: Supported topology identifiers. Extend this as new builders are added.
-SUPPORTED_TOPOLOGIES: set[str] = {"spine_leaf", "hub_spoke", "security_stack"}
+SUPPORTED_TOPOLOGIES: set[str] = {
+    "spine_leaf",
+    "hub_spoke",
+    "security_stack",
+    "multi_site",
+}
 
 #: Supported hub-spoke sub-modes.
 SUPPORTED_HUB_SPOKE_MODES: set[str] = {"tenant_fabric", "wan_branch"}
@@ -152,22 +160,58 @@ class Container:
 
 
 @dataclass
+class SiteSpec:
+    """
+    Site definition for multi-site topology.
+
+    Attributes:
+        name:             Site identifier (e.g. 'dc1', 'dc2').
+        spines:           Number of spine nodes (default 2).
+        leafs:            Number of leaf nodes (default 4).
+        compute_per_leaf: Compute / GPU nodes per leaf (default 0 = omit tier).
+    """
+    name:             str
+    spines:           int = 2
+    leafs:            int = 4
+    compute_per_leaf: int = 0
+
+
+@dataclass
+class InterconnectSpec:
+    """
+    DCI / interconnect specification for multi-site topology.
+
+    Attributes:
+        type:      Interconnect type: evpn | vxlan | ospf | bgp | static.
+        dci_nodes: Number of DCI / Route-Reflector nodes per interconnect band.
+        label:     Override the band label. Empty = auto '{TYPE} / DCI Interconnect'.
+    """
+    type:      str = "evpn"
+    dci_nodes: int = 2
+    label:     str = ""
+
+
+@dataclass
 class TopologyModel:
     """
     The complete parsed topology — one-to-one with a valid YAML file.
 
     Attributes:
-        meta:       Diagram metadata.
-        sites:      List of declared sites.
-        devices:    List of network devices.
-        links:      List of network links.
-        containers: List of container groups.
+        meta:         Diagram metadata.
+        sites:        List of declared sites.
+        devices:      List of network devices.
+        links:        List of network links.
+        containers:   List of container groups.
+        site_specs:   List of site specs for multi-site topology.
+        interconnect: DCI/interconnect spec for multi-site topology.
     """
-    meta:       DiagramMeta        = field(default_factory=DiagramMeta)
-    sites:      list[Site]         = field(default_factory=list)
-    devices:    list[Device]       = field(default_factory=list)
-    links:      list[Link]         = field(default_factory=list)
-    containers: list[Container]    = field(default_factory=list)
+    meta:         DiagramMeta         = field(default_factory=DiagramMeta)
+    sites:        list[Site]          = field(default_factory=list)
+    devices:      list[Device]        = field(default_factory=list)
+    links:        list[Link]          = field(default_factory=list)
+    containers:   list[Container]     = field(default_factory=list)
+    site_specs:   list[SiteSpec]      = field(default_factory=list)
+    interconnect: InterconnectSpec    = field(default_factory=InterconnectSpec)
 
 
 # ==============================================================================
@@ -212,7 +256,7 @@ def load_model(yaml_path: str) -> TopologyModel:
         topology_defaulted = not topology_declared,
     )
 
-    # ── sites ─────────────────────────────────────────────────────────────────
+    # ── sites (generic Site list — used by spine_leaf / hub_spoke / security_stack) ──
     sites = [
         Site(name=str(s.get("name", "")))
         for s in (raw.get("sites") or [])
@@ -246,7 +290,7 @@ def load_model(yaml_path: str) -> TopologyModel:
         if lnk and lnk.get("a") and lnk.get("b")
     ]
 
-    # ── containers ───────────────────────────────────────────────────────────
+    # ── containers ────────────────────────────────────────────────────────────
     containers = [
         Container(
             name    = str(c.get("name", "")),
@@ -258,4 +302,35 @@ def load_model(yaml_path: str) -> TopologyModel:
         if c and c.get("name")
     ]
 
-    return TopologyModel(meta=meta, sites=sites, devices=devices, links=links, containers=containers)
+    # ── multi_site: site_specs ─────────────────────────────────────────────────
+    # Re-uses the 'sites' YAML key; each entry may also carry spines/leafs/compute.
+    site_specs: list[SiteSpec] = []
+    for rs in (raw.get("sites") or []):
+        if isinstance(rs, dict) and rs.get("name"):
+            site_specs.append(SiteSpec(
+                name             = str(rs.get("name", "site")),
+                spines           = int(rs.get("spines", 2)),
+                leafs            = int(rs.get("leafs", 4)),
+                compute_per_leaf = int(rs.get("compute_per_leaf", 0)),
+            ))
+
+    # ── multi_site: interconnect ───────────────────────────────────────────────
+    raw_ic = raw.get("interconnect") or {}
+    if isinstance(raw_ic, dict):
+        interconnect = InterconnectSpec(
+            type      = str(raw_ic.get("type",      "evpn")),
+            dci_nodes = int(raw_ic.get("dci_nodes", 2)),
+            label     = str(raw_ic.get("label",     "")),
+        )
+    else:
+        interconnect = InterconnectSpec()
+
+    return TopologyModel(
+        meta         = meta,
+        sites        = sites,
+        devices      = devices,
+        links        = links,
+        containers   = containers,
+        site_specs   = site_specs,
+        interconnect = interconnect,
+    )

@@ -26,6 +26,12 @@ Error codes
     E006   Unsupported topology type
     E007   Unsupported style profile
     E008   Device references undeclared site
+    E009   Unsupported hub_spoke mode
+    E010   Container member references unknown hostname
+    E011   Duplicate site name (multi_site)
+    E012   Unsupported interconnect type (multi_site)
+    E013   Site has zero spines (multi_site)
+    E014   Site has zero leafs (multi_site)
 
 Warning codes
 -------------
@@ -34,13 +40,22 @@ Warning codes
     W003   No devices declared
     W004   No links declared
     W005   Device has no site assigned
+    W006   hub_spoke topology_mode not declared — defaulted
+    W007   No interconnect type declared for multi_site — defaulted
+    W008   multi_site topology has fewer than 2 sites
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from models import TopologyModel, SUPPORTED_TOPOLOGIES, SUPPORTED_STYLE_PROFILES, SUPPORTED_HUB_SPOKE_MODES
+from models import (
+    TopologyModel,
+    SUPPORTED_TOPOLOGIES,
+    SUPPORTED_STYLE_PROFILES,
+    SUPPORTED_HUB_SPOKE_MODES,
+)
+from drawio import SUPPORTED_INTERCONNECT_TYPES
 
 
 # ==============================================================================
@@ -173,8 +188,77 @@ def validate(model: TopologyModel) -> ValidationResult:
             ),
         ))
 
+    # ── multi_site checks ─────────────────────────────────────────────────────
+    if model.meta.topology == "multi_site":
+
+        # E011 — duplicate site name
+        seen_sites: set[str] = set()
+        for i, s in enumerate(model.site_specs):
+            if s.name in seen_sites:
+                errors.append(ValidationError(
+                    code    = "E011",
+                    field   = f"sites[{i}].name",
+                    message = f"Duplicate site name: '{s.name}'.",
+                ))
+            seen_sites.add(s.name)
+
+        # E012 — invalid interconnect type
+        if model.interconnect.type not in SUPPORTED_INTERCONNECT_TYPES:
+            errors.append(ValidationError(
+                code    = "E012",
+                field   = "interconnect.type",
+                message = (
+                    f"Unsupported interconnect type: '{model.interconnect.type}'. "
+                    f"Supported: {', '.join(sorted(SUPPORTED_INTERCONNECT_TYPES))}."
+                ),
+            ))
+
+        # E013 — site has zero spines
+        for i, s in enumerate(model.site_specs):
+            if s.spines < 1:
+                errors.append(ValidationError(
+                    code    = "E013",
+                    field   = f"sites[{i}].spines",
+                    message = (
+                        f"Site '{s.name}' must have at least 1 spine (got {s.spines})."
+                    ),
+                ))
+
+        # E014 — site has zero leafs
+        for i, s in enumerate(model.site_specs):
+            if s.leafs < 1:
+                errors.append(ValidationError(
+                    code    = "E014",
+                    field   = f"sites[{i}].leafs",
+                    message = (
+                        f"Site '{s.name}' must have at least 1 leaf (got {s.leafs})."
+                    ),
+                ))
+
+        # W007 — no interconnect type declared (empty string)
+        if not model.interconnect.type:
+            warnings.append(ValidationWarning(
+                code    = "W007",
+                field   = "interconnect.type",
+                message = (
+                    "No interconnect type declared for multi_site topology; "
+                    "defaulted to 'evpn'."
+                ),
+            ))
+
+        # W008 — fewer than 2 sites
+        if len(model.site_specs) < 2:
+            warnings.append(ValidationWarning(
+                code    = "W008",
+                field   = "sites",
+                message = (
+                    "multi_site topology has fewer than 2 sites — "
+                    "consider using spine_leaf instead."
+                ),
+            ))
+
     # ── W002: no sites ────────────────────────────────────────────────────────
-    if not model.sites:
+    if not model.sites and model.meta.topology != "multi_site":
         warnings.append(ValidationWarning(
             code    = "W002",
             field   = "sites",
@@ -184,7 +268,7 @@ def validate(model: TopologyModel) -> ValidationResult:
     declared_sites = {s.name for s in model.sites}
 
     # ── W003: no devices ──────────────────────────────────────────────────────
-    if not model.devices:
+    if not model.devices and model.meta.topology != "multi_site":
         warnings.append(ValidationWarning(
             code    = "W003",
             field   = "devices",
@@ -248,7 +332,7 @@ def validate(model: TopologyModel) -> ValidationResult:
             ))
 
     # ── W004: no links ────────────────────────────────────────────────────────
-    if not model.links:
+    if not model.links and model.meta.topology != "multi_site":
         warnings.append(ValidationWarning(
             code    = "W004",
             field   = "links",
@@ -267,7 +351,6 @@ def validate(model: TopologyModel) -> ValidationResult:
                 message = f"Link at index {i} has an empty 'a' endpoint.",
             ))
         elif link.a not in seen_hostnames:
-            # E004: unknown endpoint
             errors.append(ValidationError(
                 code    = "E004",
                 field   = f"{ref}.a",

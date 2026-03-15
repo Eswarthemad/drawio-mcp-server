@@ -706,6 +706,60 @@ def build_security_stack(
     )
 
 
+
+
+# ==============================================================================
+# TOOL 19 — build_multi_site
+# ==============================================================================
+
+@mcp.tool()
+def build_multi_site(
+    path:              str,
+    sites:             list[dict] | None = None,
+    interconnect_type: str = "evpn",
+    dci_nodes:         int = 2,
+    style_profile:     str = "minimal",
+) -> str:
+    """
+    Build a multi-site spine-leaf fabric diagram with a DCI/EVPN interconnect band.
+
+    Layout (vertical stack, top → bottom):
+        Site 1 container  — spine row + leaf row (+ optional compute row)
+        EVPN/DCI band     — Route-Reflector / DCI border nodes
+        Site 2 container  — spine row + leaf row
+        ...               — repeats for N sites
+
+    Sites are automatically wired:
+        Each site's spines connect up/down to the DCI nodes in the adjacent band.
+        DCI nodes are peered together inside the band.
+        Full-mesh fabric links connect every spine to every leaf within each site.
+
+    Args:
+        path:              Full path where the .drawio file will be written.
+        sites:             List of site dicts:
+                             [{"name": "dc1", "spines": 2, "leafs": 4,
+                               "compute_per_leaf": 0}]
+                           Defaults to two sites (dc1, dc2) — 2 spines + 4 leafs each.
+        interconnect_type: Interconnect type: evpn | vxlan | ospf | bgp | static.
+                           Default: 'evpn'.
+        dci_nodes:         Number of DCI / Route-Reflector nodes per interconnect band.
+                           Default: 2.
+        style_profile:     Visual style profile: minimal | enterprise | dark | vendor-neutral.
+                           Default: 'minimal'.
+
+    Returns:
+        JSON build summary on success (status, sites, interconnect_type, dci_nodes_per_band,
+        total_nodes), or "ERROR: ..." on failure.
+    """
+    return drawio.build_multi_site(
+        path              = path,
+        sites             = sites,
+        interconnect_type = interconnect_type,
+        dci_nodes         = dci_nodes,
+        style_profile     = style_profile,
+    )
+
+
 # ==============================================================================
 # ENTRY POINT
 # ==============================================================================

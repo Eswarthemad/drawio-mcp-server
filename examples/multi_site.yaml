@@ -1,0 +1,22 @@
+meta:
+  name: "Sample — Multi-Site Fabric"
+  topology: multi_site
+  style_profile: minimal
+
+# ─── Site definitions ───────────────────────────────────────────────────────
+sites:
+  - name: dc1
+    spines: 2
+    leafs: 4
+    compute_per_leaf: 2        # optional — omit or set 0 to skip compute row
+
+  - name: dc2
+    spines: 2
+    leafs: 4
+    compute_per_leaf: 0
+
+# ─── DCI / Interconnect ──────────────────────────────────────────────────────
+interconnect:
+  type: evpn                   # evpn | vxlan | ospf | bgp | static
+  dci_nodes: 2                 # Route-Reflector / border nodes per band
+  label: ""                    # leave empty → auto-labelled "{TYPE} / DCI Interconnect"
