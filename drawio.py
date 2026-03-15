@@ -29,11 +29,11 @@ Layout
 """
 
 import json
+import os
 import uuid
 import xml.etree.ElementTree as ET
 from collections import defaultdict, deque
 from pathlib import Path
-
 
 # ==============================================================================
 # DEVICE ROLE DEFINITIONS
@@ -942,9 +942,6 @@ def build_spine_leaf_fabric(
     except Exception as e:
         return f"ERROR: {e}"
 
-import xml.etree.ElementTree as ET
-import json, os
- 
 def build_multi_site(
     path: str,
     sites: list | None = None,
@@ -1184,6 +1181,8 @@ def build_multi_site(
         f"strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;"
     )
     for band_idx, dci_ids in enumerate(dci_ids_per_band):
+        if not dci_ids:
+         continue
         upper_spines = all_site_spine_ids[band_idx]
         lower_spines = all_site_spine_ids[band_idx + 1]
  

@@ -4,9 +4,13 @@ Unit tests for Phase 5 — multi-site topology.
 Covers: build_multi_site(), models, validators.
 """
 
-import sys, os, json, tempfile, shutil
+import sys
+import os
+import json
+import tempfile
+import shutil
 import pytest
-
+from models import DiagramMeta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import drawio
@@ -111,7 +115,7 @@ class TestNodeCounts:
         drawio.build_multi_site(p, sites=sites, dci_nodes=0)
         nodes = json.loads(drawio.get_nodes(p))
         labels = [n["label"] for n in nodes if n["type"] == "vertex"]
-        compute_labels = [l for l in labels if "compute" in l.lower()]
+        compute_labels = [label for label in labels if "compute" in label.lower()]
         # dc1: 2 leafs × 2 compute = 4 compute nodes
         assert len(compute_labels) == 4
 
@@ -136,7 +140,8 @@ class TestNodeCounts:
 class TestMultiSiteModel:
 
     def _yaml(self, content):
-        import textwrap, tempfile
+        import textwrap
+        import tempfile
         f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
         f.write(textwrap.dedent(content))
         f.flush()
@@ -193,10 +198,8 @@ class TestMultiSiteModel:
 # validators.py — multi_site error/warning codes
 # ═══════════════════════════════════════════════════════════════
 
-from models import DiagramMeta, SiteSpec, InterconnectSpec
 
 def _make_ms_model(sites=None, interconnect_type="evpn", dci_nodes=2):
-    from models import TopologyModel
     meta = DiagramMeta(name="MS", topology="multi_site", style_profile="minimal")
     model = TopologyModel(meta=meta, devices=[], links=[], sites=[], containers=[])
     model.site_specs = sites or [
