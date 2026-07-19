@@ -11,6 +11,97 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.6.0] — 2026-07-19
+
+### Added
+
+- **Tool 20 — `build_multi_cluster`**
+  Build a multi-cluster container orchestration diagram: an optional Rancher
+  management plane wired to N downstream Kubernetes or OpenShift clusters,
+  each showing control plane, worker nodes, and namespace/project containers
+  with workload chains (ingress/route → service → deployment/pod).
+
+  Features:
+  - Rancher management band with `manage` links to each cluster's first
+    control-plane node (optional, on by default)
+  - Per-cluster platform: `k8s` or `openshift`
+  - Configurable control-plane node count and worker node count per cluster
+  - `k8s` platform renders a dedicated etcd row (one per master, dashed link);
+    `openshift` platform omits it, matching how OpenShift bundles etcd into
+    the control plane
+  - Namespace (`k8s`) / Project (`openshift`) sub-containers per cluster
+  - Workload objects inside each namespace, auto-ordered into a visual flow
+    chain: `ingress`/`route` → `service` → `deployment`/`statefulset`/
+    `daemonset`/`pod`
+  - `configmap` and `secret` render as standalone nodes (no chain edge)
+  - YAML-driven via `topology: multi_cluster`
+
+- **New device roles**, styled across all four style profiles:
+  `rancher_server`, `k8s_master`, `k8s_etcd`, `k8s_worker`,
+  `openshift_master`, `openshift_infra_node`, `openshift_worker`,
+  `ingress_controller`, `container_registry`
+
+- **`topology: multi_cluster` in YAML model**
+  `build_diagram_from_model` dispatches to `build_multi_cluster` when
+  `meta.topology: multi_cluster` is declared.
+
+  New YAML keys:
+  - `rancher.enabled` — render the Rancher management band (default `true`)
+  - `rancher.name` — label for the Rancher server node
+  - `clusters[].platform` — `k8s` | `openshift`
+  - `clusters[].control_plane_nodes` — master node count
+  - `clusters[].worker_nodes` — worker node count
+  - `clusters[].namespaces[].name` — namespace / project name
+  - `clusters[].namespaces[].workloads[].type` — workload type
+  - `clusters[].namespaces[].workloads[].name` — workload name
+  - `clusters[].namespaces[].workloads[].replicas` — optional replica count
+
+- **New dataclasses in `models.py`**
+  - `ClusterSpec` — cluster definition for multi-cluster topology
+  - `NamespaceSpec` — namespace/project definition
+  - `WorkloadSpec` — workload object definition
+  - `RancherSpec` — Rancher management-plane specification
+  - `TopologyModel` gains `cluster_specs` and `rancher` fields
+
+- **`multi_cluster` added to `SUPPORTED_TOPOLOGIES`**
+
+- **New constants in `drawio.py`**
+  - `SUPPORTED_CLUSTER_PLATFORMS` — `{"k8s", "openshift"}`
+  - `SUPPORTED_WORKLOAD_TYPES` — `{"deployment", "statefulset", "daemonset",
+    "pod", "service", "ingress", "route", "configmap", "secret"}`
+
+- **New validation codes**
+
+  Errors (block build):
+  - `E015` — unsupported cluster platform
+  - `E016` — cluster declares zero control-plane nodes
+  - `E017` — cluster declares zero worker nodes
+  - `E018` — duplicate cluster name
+  - `E019` — unsupported workload type
+
+  Warnings (non-blocking):
+  - `W009` — Rancher disabled with more than one cluster declared
+  - `W010` — no clusters declared
+
+- **`examples/multi_cluster.yaml`** — two-cluster example (K8s + OpenShift)
+  with Rancher management plane, namespaces, and workload chains.
+
+- **`tests/test_multicluster.py`** — 41 tests covering `build_multi_cluster`,
+  multi-cluster model parsing, validation codes E015–E019 / W009–W010, and
+  the full YAML → validate → build pipeline.
+
+### Fixed
+
+- `drawio.py`: `build_multi_site` raised `ZeroDivisionError` when called with
+  `dci_nodes=0`. Cross-site uplink wiring now skips bands with no DCI nodes
+  instead of dividing by an empty list length.
+
+### Changed
+
+- Test suite expanded from 234 to 340 tests total.
+
+---
+
 ## [1.5.0] — 2026-03-15
 
 ### Added
@@ -248,7 +339,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-[Unreleased]: https://github.com/Eswarthemad/drawio-mcp-server/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/Eswarthemad/drawio-mcp-server/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/Eswarthemad/drawio-mcp-server/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Eswarthemad/drawio-mcp-server/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Eswarthemad/drawio-mcp-server/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Eswarthemad/drawio-mcp-server/compare/v1.2.0...v1.3.0

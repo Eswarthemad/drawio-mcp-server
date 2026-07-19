@@ -1,0 +1,45 @@
+meta:
+  name: "Multi-Cluster Container Platform"
+  topology: multi_cluster
+  style_profile: minimal
+
+rancher:
+  enabled: true
+  name: rancher-server
+
+clusters:
+  - name: cluster-a
+    platform: k8s
+    control_plane_nodes: 3
+    worker_nodes: 3
+    namespaces:
+      - name: production
+        workloads:
+          - type: ingress
+            name: web-ingress
+          - type: service
+            name: web-svc
+          - type: deployment
+            name: web-app
+            replicas: 3
+      - name: kube-system
+        workloads:
+          - type: configmap
+            name: cluster-cfg
+          - type: daemonset
+            name: cni-agent
+
+  - name: cluster-b
+    platform: openshift
+    control_plane_nodes: 3
+    worker_nodes: 4
+    namespaces:
+      - name: payments
+        workloads:
+          - type: route
+            name: payments-api
+          - type: service
+            name: payments-svc
+          - type: deployment
+            name: payments
+            replicas: 4

@@ -29,11 +29,11 @@ Layout
 """
 
 import json
-import os
 import uuid
 import xml.etree.ElementTree as ET
 from collections import defaultdict, deque
 from pathlib import Path
+
 
 # ==============================================================================
 # DEVICE ROLE DEFINITIONS
@@ -67,8 +67,45 @@ ROLE_LAYER: dict[str, int | str] = {
     # Out-of-band (sidebar column, not in main grid)
     "management_switch":  "sidebar",
     "monitoring_node":    "sidebar",
+    # Container orchestration — management plane
+    "rancher_server":    -2,   # topmost tier, above all clusters
+    # Container orchestration — control plane
+    "k8s_master":         0,
+    "k8s_etcd":           0,
+    "openshift_master":   0,
+    # Container orchestration — infra / aggregation
+    "openshift_infra_node": 1,
+    "ingress_controller":   1,
+    # Container orchestration — worker / access
+    "k8s_worker":          2,
+    "openshift_worker":    2,
+    # Container orchestration — sidebar
+    "container_registry": "sidebar",
 }
 SUPPORTED_INTERCONNECT_TYPES = {"evpn", "vxlan", "ospf", "bgp", "static"}
+
+#: Supported cluster platforms for build_multi_cluster().
+SUPPORTED_CLUSTER_PLATFORMS = {"k8s", "openshift"}
+
+#: Supported workload object types inside a namespace/project.
+SUPPORTED_WORKLOAD_TYPES = {
+    "deployment", "statefulset", "daemonset", "pod",
+    "service", "ingress", "route", "configmap", "secret",
+}
+
+#: Workload types that participate in the ingress→service→workload flow chain.
+#: Order value determines vertical position and chain-edge eligibility.
+_WORKLOAD_FLOW_ORDER = {
+    "ingress":     0,
+    "route":       0,   # OpenShift equivalent of ingress
+    "service":     1,
+    "deployment":  2,
+    "statefulset": 2,
+    "daemonset":   2,
+    "pod":         2,
+}
+#: Workload types placed as standalone nodes (no chain edge).
+_WORKLOAD_STANDALONE_TYPES = {"configmap", "secret"}
 
 #: Default style used when a role/profile lookup produces no result.
 DEFAULT_STYLE: str = "rounded=1;whiteSpace=wrap;html=1;"
@@ -942,6 +979,9 @@ def build_spine_leaf_fabric(
     except Exception as e:
         return f"ERROR: {e}"
 
+import xml.etree.ElementTree as ET
+import json, os
+ 
 def build_multi_site(
     path: str,
     sites: list | None = None,
@@ -1182,7 +1222,7 @@ def build_multi_site(
     )
     for band_idx, dci_ids in enumerate(dci_ids_per_band):
         if not dci_ids:
-         continue
+            continue   # dci_nodes=0 — no DCI nodes to wire to, skip this band
         upper_spines = all_site_spine_ids[band_idx]
         lower_spines = all_site_spine_ids[band_idx + 1]
  
@@ -1390,6 +1430,43 @@ def build_diagram_from_model(path: str, yaml_path: str) -> str:
             interconnect_type = model.interconnect.type,
             dci_nodes         = model.interconnect.dci_nodes,
             style_profile     = model.meta.style_profile,
+        )
+        if build_result_str.startswith("ERROR"):
+            return _json.dumps({
+                "status":   "error",
+                "errors":   [{"code": "E097", "field": "build", "message": build_result_str}],
+                "warnings": result.to_dict()["warnings"],
+            }, indent=2)
+        build_summary = _json.loads(build_result_str)
+        build_summary["warnings"] = result.to_dict()["warnings"]
+        return _json.dumps(build_summary, indent=2)
+
+    # ── multi_cluster dispatch ─────────────────────────────────────────────────
+    if topology == "multi_cluster":
+        build_result_str = build_multi_cluster(
+            path            = path,
+            clusters        = [
+                {
+                    "name":                 cl.name,
+                    "platform":             cl.platform,
+                    "control_plane_nodes":  cl.control_plane_nodes,
+                    "worker_nodes":         cl.worker_nodes,
+                    "namespaces": [
+                        {
+                            "name": ns.name,
+                            "workloads": [
+                                {"type": wl.type, "name": wl.name, "replicas": wl.replicas}
+                                for wl in ns.workloads
+                            ],
+                        }
+                        for ns in cl.namespaces
+                    ],
+                }
+                for cl in model.cluster_specs
+            ],
+            rancher_enabled = model.rancher.enabled,
+            rancher_name    = model.rancher.name,
+            style_profile   = model.meta.style_profile,
         )
         if build_result_str.startswith("ERROR"):
             return _json.dumps({
@@ -1920,3 +1997,357 @@ def build_security_stack(
 
     except Exception as exc:
         return f"ERROR: {exc}"
+
+# ==============================================================================
+# TOOL 20 — build_multi_cluster (Rancher / Kubernetes / OpenShift)
+# ==============================================================================
+
+def build_multi_cluster(
+    path: str,
+    clusters: list | None = None,
+    rancher_enabled: bool = True,
+    rancher_name: str = "rancher-server",
+    style_profile: str = "minimal",
+) -> str:
+    """
+    Build a multi-cluster container orchestration diagram: an optional Rancher
+    management plane at the top, wired down to N downstream clusters — each a
+    self-contained Kubernetes or OpenShift cluster with control plane, worker
+    nodes, and namespace/project sub-containers holding workload chains.
+
+    Layout (top → bottom):
+        Rancher Management Plane   (optional — single management node)
+        Cluster 1  (control plane row → etcd row [k8s only] → worker row →
+                    namespace containers with workload chains)
+        Cluster 2  ...
+        Cluster N  ...
+
+    Args:
+        path:            Output .drawio file path.
+        clusters:        List of cluster dicts. Each:
+                            {
+                              "name": "cluster-a",
+                              "platform": "k8s" | "openshift",
+                              "control_plane_nodes": 3,
+                              "worker_nodes": 3,
+                              "namespaces": [
+                                {
+                                  "name": "production",
+                                  "workloads": [
+                                    {"type": "ingress", "name": "web-ingress"},
+                                    {"type": "service",  "name": "web-svc"},
+                                    {"type": "deployment", "name": "web-app", "replicas": 3},
+                                  ]
+                                }
+                              ]
+                            }
+                          Defaults to two clusters (cluster-a on k8s, cluster-b
+                          on openshift), 3 control-plane + 3 worker nodes each,
+                          no namespaces.
+        rancher_enabled: If True, adds a Rancher management band wired to
+                          every cluster's first control-plane node.
+        rancher_name:    Label for the Rancher management node.
+        style_profile:   Style profile (minimal | enterprise | dark | vendor-neutral).
+                          Currently drives base palette only — full profile
+                          integration follows the same pattern as build_multi_site.
+
+    Returns:
+        JSON summary string on success, or "ERROR: ..." on failure.
+    """
+    if clusters is None:
+        clusters = [
+            {"name": "cluster-a", "platform": "k8s",
+             "control_plane_nodes": 3, "worker_nodes": 3, "namespaces": []},
+            {"name": "cluster-b", "platform": "openshift",
+             "control_plane_nodes": 3, "worker_nodes": 3, "namespaces": []},
+        ]
+
+    for c in clusters:
+        platform = c.get("platform", "k8s")
+        if platform not in SUPPORTED_CLUSTER_PLATFORMS:
+            return (f"ERROR: Unsupported platform '{platform}' for cluster "
+                    f"'{c.get('name', '?')}'. "
+                    f"Supported: {', '.join(sorted(SUPPORTED_CLUSTER_PLATFORMS))}.")
+        for ns in c.get("namespaces", []):
+            for wl in ns.get("workloads", []):
+                wtype = wl.get("type", "")
+                if wtype not in SUPPORTED_WORKLOAD_TYPES:
+                    return (f"ERROR: Unsupported workload type '{wtype}' in "
+                            f"namespace '{ns.get('name', '?')}'. "
+                            f"Supported: {', '.join(sorted(SUPPORTED_WORKLOAD_TYPES))}.")
+
+    # ── layout constants ──
+    NODE_W        = 130
+    NODE_H        = 45
+    ETCD_H        = 35
+    H_GAP         = 20
+    ROW_GAP       = 25
+    TITLE_H       = 30
+    PAD_X         = 50
+    PAD_TOP       = 50
+    PAD_BOT       = 30
+    CLUSTER_MARGIN = 40
+    LEFT_MARGIN   = 60
+    RANCHER_H     = 100
+
+    WL_W          = 160
+    WL_H          = 35
+    WL_GAP        = 12
+    NS_TITLE_H    = 24
+    NS_PAD        = 15
+    NS_GAP        = 30
+
+    _CLUSTER_COLORS = {
+        "k8s":       ("#dae8fc", "#6c8ebf", "#3a5f8a"),
+        "openshift": ("#e1d5e7", "#9673a6", "#6a4c82"),
+    }
+    _NS_COLORS = [
+        ("#f8cecc", "#b85450"),
+        ("#fff2cc", "#d6b656"),
+        ("#d5e8d4", "#82b366"),
+        ("#dae8fc", "#6c8ebf"),
+    ]
+
+    graph = ET.Element("mxGraphModel", {
+        "dx": "1422", "dy": "762", "grid": "1", "gridSize": "10",
+        "pageWidth": "1700", "pageHeight": "2200",
+    })
+    root_el = ET.SubElement(graph, "root")
+    ET.SubElement(root_el, "mxCell", {"id": "0"})
+    ET.SubElement(root_el, "mxCell", {"id": "1", "parent": "0"})
+
+    id_counter = [200]
+    def next_cid(prefix: str = "") -> str:
+        id_counter[0] += 1
+        return f"{prefix}{id_counter[0]}"
+
+    def geo(x, y, w, h):
+        el = ET.Element("mxGeometry", {"x": str(x), "y": str(y), "width": str(w), "height": str(h), "as": "geometry"})
+        return el
+
+    def add_vertex(parent_id, cell_id, label, x, y, w, h, style):
+        cell = ET.SubElement(root_el, "mxCell", {
+            "id": cell_id, "value": label, "style": style,
+            "vertex": "1", "parent": parent_id,
+        })
+        cell.append(geo(x, y, w, h))
+        return cell_id
+
+    def add_edge(parent_id, src, tgt, style, label=""):
+        eid = next_cid("e")
+        cell = ET.SubElement(root_el, "mxCell", {
+            "id": eid, "value": label, "style": style,
+            "edge": "1", "source": src, "target": tgt, "parent": parent_id,
+        })
+        cell.append(ET.Element("mxGeometry", {"relative": "1", "as": "geometry"}))
+        return eid
+
+    def namespace_dims(ns: dict) -> tuple[int, int]:
+        n_wl = max(1, len(ns.get("workloads", [])))
+        h = NS_TITLE_H + NS_PAD + n_wl * (WL_H + WL_GAP) - WL_GAP + NS_PAD
+        return WL_W + 2 * (NS_PAD - 5), h
+
+    def cluster_width(c: dict) -> int:
+        cp = max(1, c.get("control_plane_nodes", 3))
+        wk = max(1, c.get("worker_nodes", 3))
+        top_row_w = cp * NODE_W + (cp - 1) * H_GAP
+        worker_row_w = wk * NODE_W + (wk - 1) * H_GAP
+        nss = c.get("namespaces", [])
+        if nss:
+            ns_w_total = sum(namespace_dims(ns)[0] for ns in nss) + (len(nss) - 1) * NS_GAP
+        else:
+            ns_w_total = 0
+        return max(top_row_w, worker_row_w, ns_w_total) + 2 * PAD_X
+
+    def cluster_height(c: dict) -> int:
+        platform = c.get("platform", "k8s")
+        has_etcd = platform == "k8s"
+        y = TITLE_H + PAD_TOP + NODE_H
+        if has_etcd:
+            y += ROW_GAP + ETCD_H
+        y += ROW_GAP + NODE_H  # worker row
+        nss = c.get("namespaces", [])
+        if nss:
+            ns_h = max(namespace_dims(ns)[1] for ns in nss)
+            y += ROW_GAP + ns_h
+        y += PAD_BOT
+        return y
+
+    max_cluster_w = max(cluster_width(c) for c in clusters)
+    canvas_w = max(max_cluster_w + 2 * LEFT_MARGIN, 900)
+
+    y_cursor = 30
+    rancher_node_id = None
+
+    # ── Rancher management band ──
+    if rancher_enabled:
+        band_w = 360
+        band_x = LEFT_MARGIN + (canvas_w - 2 * LEFT_MARGIN - band_w) // 2
+        band_id = next_cid("rancher_band_")
+        add_vertex("1", band_id, "Rancher Management Plane",
+                   band_x, y_cursor, band_w, RANCHER_H,
+                   "swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;"
+                   "strokeWidth=3;fontStyle=1;fontSize=13;container=1;collapsible=0;"
+                   "whiteSpace=wrap;html=1;")
+        rancher_node_id = next_cid("rancher_srv_")
+        add_vertex(band_id, rancher_node_id, f"{rancher_name}\n(Management UI + API)",
+                   (band_w - NODE_W - 20) // 2, 45, NODE_W + 20, NODE_H,
+                   "rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;"
+                   "strokeColor=#666666;fontStyle=1;fontSize=10;")
+        y_cursor += RANCHER_H + CLUSTER_MARGIN
+
+    all_cluster_first_control: list[str] = []
+
+    for idx, c in enumerate(clusters):
+        name     = c.get("name", f"cluster-{idx+1}")
+        platform = c.get("platform", "k8s")
+        cp_n     = max(1, c.get("control_plane_nodes", 3))
+        wk_n     = max(1, c.get("worker_nodes", 3))
+        namespaces = c.get("namespaces", [])
+        has_etcd = platform == "k8s"
+
+        fill, stroke, dark = _CLUSTER_COLORS.get(platform, _CLUSTER_COLORS["k8s"])
+        master_role_label = "master" if platform == "k8s" else "master"
+        worker_role_label = "worker"
+
+        cw = cluster_width(c)
+        ch = cluster_height(c)
+        cx = LEFT_MARGIN + (canvas_w - 2 * LEFT_MARGIN - cw) // 2
+
+        cluster_id = next_cid(f"cl_{idx}_")
+        platform_label = "Kubernetes" if platform == "k8s" else "OpenShift"
+        add_vertex("1", cluster_id, f"{name} — {platform_label}",
+                   cx, y_cursor, cw, ch,
+                   f"swimlane;startSize={TITLE_H};fillColor={fill};strokeColor={stroke};"
+                   f"strokeWidth=3;fontStyle=1;fontSize=13;container=1;collapsible=0;"
+                   f"whiteSpace=wrap;html=1;")
+
+        # control plane row
+        cp_row_w = cp_n * NODE_W + (cp_n - 1) * H_GAP
+        cp_start = (cw - cp_row_w) // 2
+        cp_y = TITLE_H + PAD_TOP
+        control_ids = []
+        for i in range(cp_n):
+            role = "k8s_master" if platform == "k8s" else "openshift_master"
+            cid_ = next_cid(f"{name}_m")
+            add_vertex(cluster_id, cid_, f"{name}-{master_role_label}-{i+1:02d}",
+                       cp_start + i * (NODE_W + H_GAP), cp_y, NODE_W, NODE_H,
+                       f"rounded=1;whiteSpace=wrap;html=1;fillColor={stroke};"
+                       f"strokeColor={dark};fontColor=#ffffff;fontStyle=1;fontSize=10;")
+            control_ids.append(cid_)
+        all_cluster_first_control.append(control_ids[0])
+
+        y_after_cp = cp_y + NODE_H
+
+        # etcd row (k8s only)
+        etcd_ids = []
+        if has_etcd:
+            etcd_y = y_after_cp + ROW_GAP
+            for i in range(cp_n):
+                eid_ = next_cid(f"{name}_e")
+                add_vertex(cluster_id, eid_, f"{name}-etcd-{i+1:02d}",
+                           cp_start + i * (NODE_W + H_GAP), etcd_y, NODE_W, ETCD_H,
+                           f"rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;"
+                           f"strokeColor={stroke};fontSize=9;")
+                add_edge(cluster_id, control_ids[i], eid_,
+                         f"edgeStyle=orthogonalEdgeStyle;strokeColor={dark};"
+                         f"strokeWidth=1;dashed=1;")
+                etcd_ids.append(eid_)
+            y_after_cp = etcd_y + ETCD_H
+
+        # worker row
+        wk_row_w = wk_n * NODE_W + (wk_n - 1) * H_GAP
+        wk_start = (cw - wk_row_w) // 2
+        wk_y = y_after_cp + ROW_GAP
+        worker_ids = []
+        for i in range(wk_n):
+            role = "k8s_worker" if platform == "k8s" else "openshift_worker"
+            wid_ = next_cid(f"{name}_w")
+            add_vertex(cluster_id, wid_, f"{name}-{worker_role_label}-{i+1:02d}",
+                       wk_start + i * (NODE_W + H_GAP), wk_y, NODE_W, NODE_H,
+                       f"rounded=1;whiteSpace=wrap;html=1;fillColor={fill};"
+                       f"strokeColor={stroke};fontSize=10;")
+            worker_ids.append(wid_)
+            add_edge(cluster_id, control_ids[0], wid_,
+                     f"edgeStyle=orthogonalEdgeStyle;strokeColor={stroke};"
+                     f"strokeWidth=1;fontSize=8;", label="API")
+
+        # namespace containers
+        if namespaces:
+            ns_y = wk_y + NODE_H + ROW_GAP
+            ns_widths = [namespace_dims(ns)[0] for ns in namespaces]
+            total_ns_w = sum(ns_widths) + (len(namespaces) - 1) * NS_GAP
+            ns_x = (cw - total_ns_w) // 2
+            cursor_x = ns_x
+            for ns_idx, ns in enumerate(namespaces):
+                ns_name = ns.get("name", f"ns-{ns_idx+1}")
+                workloads = ns.get("workloads", [])
+                ns_w, ns_h = namespace_dims(ns)
+                ns_fill, ns_stroke = _NS_COLORS[ns_idx % len(_NS_COLORS)]
+
+                ns_id = next_cid(f"{name}_ns")
+                label_prefix = "project" if platform == "openshift" else "namespace"
+                add_vertex(cluster_id, ns_id, f"{label_prefix}: {ns_name}",
+                           cursor_x, ns_y, ns_w, ns_h,
+                           f"swimlane;startSize={NS_TITLE_H};fillColor={ns_fill};"
+                           f"strokeColor={ns_stroke};strokeWidth=2;fontStyle=1;"
+                           f"fontSize=10;container=1;collapsible=0;whiteSpace=wrap;html=1;")
+
+                # sort workloads by flow order for a clean visual chain
+                sorted_wl = sorted(
+                    enumerate(workloads),
+                    key=lambda t: _WORKLOAD_FLOW_ORDER.get(t[1].get("type", ""), 9)
+                )
+                prev_flow_id = None
+                wl_y = NS_PAD
+                for _, wl in sorted_wl:
+                    wtype = wl.get("type", "pod")
+                    wname = wl.get("name", wtype)
+                    replicas = wl.get("replicas")
+                    label = f"{wtype}: {wname}"
+                    if replicas and wtype in ("deployment", "statefulset", "daemonset", "pod"):
+                        label += f" (x{replicas})"
+                    wl_id = next_cid(f"{name}_wl")
+                    add_vertex(ns_id, wl_id, label,
+                               (ns_w - WL_W) // 2, wl_y, WL_W, WL_H,
+                               f"rounded=1;whiteSpace=wrap;html=1;fillColor={ns_fill};"
+                               f"strokeColor={ns_stroke};fontSize=9;")
+                    wl_y += WL_H + WL_GAP
+
+                    if wtype in _WORKLOAD_FLOW_ORDER:
+                        if prev_flow_id is not None:
+                            add_edge(ns_id, prev_flow_id, wl_id,
+                                     f"edgeStyle=orthogonalEdgeStyle;strokeColor={ns_stroke};"
+                                     f"strokeWidth=1;")
+                        prev_flow_id = wl_id
+
+                cursor_x += ns_w + NS_GAP
+
+        y_cursor += ch + CLUSTER_MARGIN
+
+    # ── Rancher → cluster manage links ──
+    if rancher_enabled and rancher_node_id:
+        for control_id in all_cluster_first_control:
+            add_edge("1", rancher_node_id, control_id,
+                     "edgeStyle=orthogonalEdgeStyle;strokeColor=#666666;strokeWidth=2;"
+                     "dashed=1;fontStyle=2;fontSize=9;exitX=0.5;exitY=1;entryX=0.5;entryY=0;",
+                     label="manage")
+
+    tree = ET.ElementTree(graph)
+    import os as _os
+    _os.makedirs(_os.path.dirname(_os.path.abspath(path)) or ".", exist_ok=True)
+    tree.write(path, encoding="unicode", xml_declaration=False)
+
+    return json.dumps({
+        "status":          "ok",
+        "path":            path,
+        "rancher_enabled": rancher_enabled,
+        "clusters":        [
+            {"name": c.get("name"), "platform": c.get("platform", "k8s"),
+             "control_plane_nodes": c.get("control_plane_nodes", 3),
+             "worker_nodes": c.get("worker_nodes", 3),
+             "namespace_count": len(c.get("namespaces", []))}
+            for c in clusters
+        ],
+        "total_nodes": id_counter[0] - 200,
+    }, indent=2)

@@ -761,6 +761,76 @@ def build_multi_site(
 
 
 # ==============================================================================
+# TOOL 20 — build_multi_cluster
+# ==============================================================================
+
+@mcp.tool()
+def build_multi_cluster(
+    path:            str,
+    clusters:        list[dict] | None = None,
+    rancher_enabled: bool = True,
+    rancher_name:    str = "rancher-server",
+    style_profile:   str = "minimal",
+) -> str:
+    """
+    Build a multi-cluster container orchestration diagram: an optional Rancher
+    management plane wired to N downstream Kubernetes or OpenShift clusters,
+    each showing control plane, worker nodes, and namespace/project containers
+    with workload chains (ingress/route → service → deployment/pod).
+
+    Layout (top → bottom):
+        Rancher Management Plane   (optional)
+        Cluster 1 — control plane row → etcd row [k8s only] → worker row →
+                    namespace/project containers with workload chains
+        Cluster 2 ...
+        Cluster N ...
+
+    Args:
+        path:            Full path where the .drawio file will be written.
+        clusters:        List of cluster dicts:
+                            {
+                              "name": "cluster-a",
+                              "platform": "k8s" | "openshift",
+                              "control_plane_nodes": 3,
+                              "worker_nodes": 3,
+                              "namespaces": [
+                                {
+                                  "name": "production",
+                                  "workloads": [
+                                    {"type": "ingress", "name": "web-ingress"},
+                                    {"type": "service", "name": "web-svc"},
+                                    {"type": "deployment", "name": "web-app", "replicas": 3}
+                                  ]
+                                }
+                              ]
+                            }
+                          Defaults to two clusters (cluster-a on k8s,
+                          cluster-b on openshift), 3 control-plane + 3 worker
+                          nodes each, no namespaces.
+                          Workload types: deployment | statefulset | daemonset |
+                          pod | service | ingress | route | configmap | secret.
+        rancher_enabled: If True, renders the Rancher management band wired
+                          to every cluster's first control-plane node.
+                          Default: True.
+        rancher_name:    Label for the Rancher management node.
+                          Default: 'rancher-server'.
+        style_profile:   Visual style profile: minimal | enterprise | dark | vendor-neutral.
+                          Default: 'minimal'.
+
+    Returns:
+        JSON build summary on success (status, rancher_enabled, clusters,
+        total_nodes), or "ERROR: ..." on failure.
+    """
+    return drawio.build_multi_cluster(
+        path            = path,
+        clusters        = clusters,
+        rancher_enabled = rancher_enabled,
+        rancher_name    = rancher_name,
+        style_profile   = style_profile,
+    )
+
+
+# ==============================================================================
 # ENTRY POINT
 # ==============================================================================
 

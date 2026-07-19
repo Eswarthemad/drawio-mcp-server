@@ -32,6 +32,11 @@ Error codes
     E012   Unsupported interconnect type (multi_site)
     E013   Site has zero spines (multi_site)
     E014   Site has zero leafs (multi_site)
+    E015   Unsupported cluster platform (multi_cluster)
+    E016   Cluster has zero control-plane nodes (multi_cluster)
+    E017   Cluster has zero worker nodes (multi_cluster)
+    E018   Duplicate cluster name (multi_cluster)
+    E019   Unsupported workload type (multi_cluster)
 
 Warning codes
 -------------
@@ -43,6 +48,8 @@ Warning codes
     W006   hub_spoke topology_mode not declared — defaulted
     W007   No interconnect type declared for multi_site — defaulted
     W008   multi_site topology has fewer than 2 sites
+    W009   Rancher disabled with multiple clusters declared (multi_cluster)
+    W010   No clusters declared (multi_cluster)
 """
 
 from __future__ import annotations
@@ -55,7 +62,11 @@ from models import (
     SUPPORTED_STYLE_PROFILES,
     SUPPORTED_HUB_SPOKE_MODES,
 )
-from drawio import SUPPORTED_INTERCONNECT_TYPES
+from drawio import (
+    SUPPORTED_INTERCONNECT_TYPES,
+    SUPPORTED_CLUSTER_PLATFORMS,
+    SUPPORTED_WORKLOAD_TYPES,
+)
 
 
 # ==============================================================================
@@ -257,8 +268,93 @@ def validate(model: TopologyModel) -> ValidationResult:
                 ),
             ))
 
+    # ── multi_cluster checks ──────────────────────────────────────────────────
+    if model.meta.topology == "multi_cluster":
+
+        seen_cluster_names: set[str] = set()
+        all_workload_names_by_cluster: dict[str, set[str]] = {}
+
+        for i, cl in enumerate(model.cluster_specs):
+            ref = f"clusters[{i}]"
+
+            # E018 — duplicate cluster name
+            if cl.name in seen_cluster_names:
+                errors.append(ValidationError(
+                    code    = "E018",
+                    field   = f"{ref}.name",
+                    message = f"Duplicate cluster name: '{cl.name}'.",
+                ))
+            seen_cluster_names.add(cl.name)
+
+            # E015 — unknown platform
+            if cl.platform not in SUPPORTED_CLUSTER_PLATFORMS:
+                errors.append(ValidationError(
+                    code    = "E015",
+                    field   = f"{ref}.platform",
+                    message = (
+                        f"Unsupported platform '{cl.platform}' for cluster '{cl.name}'. "
+                        f"Supported: {', '.join(sorted(SUPPORTED_CLUSTER_PLATFORMS))}."
+                    ),
+                ))
+
+            # E016 — zero control-plane nodes
+            if cl.control_plane_nodes < 1:
+                errors.append(ValidationError(
+                    code    = "E016",
+                    field   = f"{ref}.control_plane_nodes",
+                    message = (
+                        f"Cluster '{cl.name}' must have at least 1 control-plane "
+                        f"node (got {cl.control_plane_nodes})."
+                    ),
+                ))
+
+            # E017 — zero worker nodes
+            if cl.worker_nodes < 1:
+                errors.append(ValidationError(
+                    code    = "E017",
+                    field   = f"{ref}.worker_nodes",
+                    message = (
+                        f"Cluster '{cl.name}' must have at least 1 worker "
+                        f"node (got {cl.worker_nodes})."
+                    ),
+                ))
+
+            # E019 — unknown workload type
+            for j, ns in enumerate(cl.namespaces):
+                for k, wl in enumerate(ns.workloads):
+                    if wl.type not in SUPPORTED_WORKLOAD_TYPES:
+                        errors.append(ValidationError(
+                            code    = "E019",
+                            field   = f"{ref}.namespaces[{j}].workloads[{k}].type",
+                            message = (
+                                f"Unsupported workload type '{wl.type}' in namespace "
+                                f"'{ns.name}' (cluster '{cl.name}'). "
+                                f"Supported: {', '.join(sorted(SUPPORTED_WORKLOAD_TYPES))}."
+                            ),
+                        ))
+
+        # W009 — Rancher disabled but multiple clusters declared
+        if not model.rancher.enabled and len(model.cluster_specs) > 1:
+            warnings.append(ValidationWarning(
+                code    = "W009",
+                field   = "rancher.enabled",
+                message = (
+                    "Rancher management plane is disabled but more than one "
+                    "cluster is declared — clusters will render with no "
+                    "management-plane linkage."
+                ),
+            ))
+
+        # W010 — no clusters declared
+        if not model.cluster_specs:
+            warnings.append(ValidationWarning(
+                code    = "W010",
+                field   = "clusters",
+                message = "No clusters declared for multi_cluster topology. The diagram will be empty.",
+            ))
+
     # ── W002: no sites ────────────────────────────────────────────────────────
-    if not model.sites and model.meta.topology != "multi_site":
+    if not model.sites and model.meta.topology not in ("multi_site", "multi_cluster"):
         warnings.append(ValidationWarning(
             code    = "W002",
             field   = "sites",
@@ -268,7 +364,7 @@ def validate(model: TopologyModel) -> ValidationResult:
     declared_sites = {s.name for s in model.sites}
 
     # ── W003: no devices ──────────────────────────────────────────────────────
-    if not model.devices and model.meta.topology != "multi_site":
+    if not model.devices and model.meta.topology not in ("multi_site", "multi_cluster"):
         warnings.append(ValidationWarning(
             code    = "W003",
             field   = "devices",
@@ -332,7 +428,7 @@ def validate(model: TopologyModel) -> ValidationResult:
             ))
 
     # ── W004: no links ────────────────────────────────────────────────────────
-    if not model.links and model.meta.topology != "multi_site":
+    if not model.links and model.meta.topology not in ("multi_site", "multi_cluster"):
         warnings.append(ValidationWarning(
             code    = "W004",
             field   = "links",

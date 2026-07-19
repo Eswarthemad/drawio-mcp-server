@@ -42,6 +42,7 @@ SUPPORTED_TOPOLOGIES: set[str] = {
     "hub_spoke",
     "security_stack",
     "multi_site",
+    "multi_cluster",
 }
 
 #: Supported hub-spoke sub-modes.
@@ -192,6 +193,68 @@ class InterconnectSpec:
 
 
 @dataclass
+class WorkloadSpec:
+    """
+    A single workload object inside a namespace/project.
+
+    Attributes:
+        type:     Workload type — must be in drawio.SUPPORTED_WORKLOAD_TYPES
+                 (deployment, statefulset, daemonset, pod, service, ingress,
+                 route, configmap, secret).
+        name:     Workload name.
+        replicas: Optional replica count (deployment/statefulset/daemonset/pod).
+    """
+    type:     str
+    name:     str
+    replicas: int = 1
+
+
+@dataclass
+class NamespaceSpec:
+    """
+    A Kubernetes namespace or OpenShift project.
+
+    Attributes:
+        name:      Namespace / project name.
+        workloads: List of workload objects declared inside it.
+    """
+    name:      str
+    workloads: list[WorkloadSpec] = field(default_factory=list)
+
+
+@dataclass
+class ClusterSpec:
+    """
+    A single downstream cluster definition for multi_cluster topology.
+
+    Attributes:
+        name:                Cluster identifier.
+        platform:            'k8s' or 'openshift'.
+        control_plane_nodes: Number of control-plane (master) nodes.
+        worker_nodes:        Number of worker nodes.
+        namespaces:          List of namespaces/projects declared in this cluster.
+    """
+    name:                str
+    platform:            str = "k8s"
+    control_plane_nodes: int = 3
+    worker_nodes:        int = 3
+    namespaces:          list[NamespaceSpec] = field(default_factory=list)
+
+
+@dataclass
+class RancherSpec:
+    """
+    Rancher management-plane specification for multi_cluster topology.
+
+    Attributes:
+        enabled: Whether to render the Rancher management band.
+        name:    Label for the Rancher server node.
+    """
+    enabled: bool = True
+    name:    str  = "rancher-server"
+
+
+@dataclass
 class TopologyModel:
     """
     The complete parsed topology — one-to-one with a valid YAML file.
@@ -212,6 +275,8 @@ class TopologyModel:
     containers:   list[Container]     = field(default_factory=list)
     site_specs:   list[SiteSpec]      = field(default_factory=list)
     interconnect: InterconnectSpec    = field(default_factory=InterconnectSpec)
+    cluster_specs: list[ClusterSpec]  = field(default_factory=list)
+    rancher:       RancherSpec        = field(default_factory=RancherSpec)
 
 
 # ==============================================================================
@@ -325,12 +390,56 @@ def load_model(yaml_path: str) -> TopologyModel:
     else:
         interconnect = InterconnectSpec()
 
+    # ── multi_cluster: cluster_specs ───────────────────────────────────────────
+    cluster_specs: list[ClusterSpec] = []
+    for rc in (raw.get("clusters") or []):
+        if not (isinstance(rc, dict) and rc.get("name")):
+            continue
+        raw_namespaces = rc.get("namespaces") or []
+        namespaces: list[NamespaceSpec] = []
+        for rns in raw_namespaces:
+            if not (isinstance(rns, dict) and rns.get("name")):
+                continue
+            raw_workloads = rns.get("workloads") or []
+            workloads = [
+                WorkloadSpec(
+                    type     = str(w.get("type", "")).lower().strip(),
+                    name     = str(w.get("name", "")),
+                    replicas = int(w.get("replicas", 1)),
+                )
+                for w in raw_workloads
+                if w and w.get("type") and w.get("name")
+            ]
+            namespaces.append(NamespaceSpec(
+                name      = str(rns.get("name", "")),
+                workloads = workloads,
+            ))
+        cluster_specs.append(ClusterSpec(
+            name                 = str(rc.get("name", "")),
+            platform             = str(rc.get("platform", "k8s")).lower().strip(),
+            control_plane_nodes  = int(rc.get("control_plane_nodes", 3)),
+            worker_nodes         = int(rc.get("worker_nodes", 3)),
+            namespaces           = namespaces,
+        ))
+
+    # ── multi_cluster: rancher ─────────────────────────────────────────────────
+    raw_rancher = raw.get("rancher") or {}
+    if isinstance(raw_rancher, dict):
+        rancher = RancherSpec(
+            enabled = bool(raw_rancher.get("enabled", True)),
+            name    = str(raw_rancher.get("name", "rancher-server")),
+        )
+    else:
+        rancher = RancherSpec()
+
     return TopologyModel(
-        meta         = meta,
-        sites        = sites,
-        devices      = devices,
-        links        = links,
-        containers   = containers,
-        site_specs   = site_specs,
-        interconnect = interconnect,
+        meta          = meta,
+        sites         = sites,
+        devices       = devices,
+        links         = links,
+        containers    = containers,
+        site_specs    = site_specs,
+        interconnect  = interconnect,
+        cluster_specs = cluster_specs,
+        rancher       = rancher,
     )

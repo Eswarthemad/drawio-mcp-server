@@ -41,6 +41,24 @@ drawio-mcp-server
 
 ---
 
+## What's New in v1.6.0
+
+**Multi-cluster container orchestration support**
+
+The new `build_multi_cluster` tool generates a Rancher management plane wired to N downstream Kubernetes or OpenShift clusters, each with control plane, workers, and namespace/project containers holding workload chains.
+
+- Rancher management band with `manage` links to each cluster (optional)
+- Per-cluster platform: `k8s` or `openshift` — OpenShift correctly omits the separate etcd row
+- Namespace (`k8s`) / Project (`openshift`) containers with workload objects
+- Auto-ordered workload flow chain: ingress/route → service → deployment/pod
+- YAML-driven via `topology: multi_cluster`
+
+**New validation codes**
+
+`E015` bad platform · `E016` zero control-plane nodes · `E017` zero worker nodes · `E018` duplicate cluster name · `E019` bad workload type · `W009` Rancher disabled with multiple clusters · `W010` no clusters declared
+
+---
+
 ## What's New in v1.5.0
 
 **Multi-site architecture support**
@@ -114,6 +132,15 @@ The new `build_multi_site` tool generates N-site spine-leaf fabrics connected by
 
 ---
 
+### Multi-Cluster Container Orchestration (v1.6.0)
+
+- `build_multi_cluster()` — Rancher management plane + N Kubernetes/OpenShift clusters
+- Namespace/project containers with auto-ordered workload flow chains
+- YAML support for `topology: multi_cluster`
+- New validation codes E015–E019, W009–W010
+
+---
+
 ## Quick Start: YAML → Diagram
 
 ### Single-site spine-leaf
@@ -180,17 +207,18 @@ build_diagram_from_model(
 
 ---
 
-## All MCP Tools — v1.5.0 (19 tools)
+## All MCP Tools — v1.6.0 (20 tools)
 
 ### High-Level Builders
 
-| Tool                       | Description                                      |
-|----------------------------|--------------------------------------------------|
-| `build_multi_site`         | Multi-site spine-leaf with EVPN/DCI interconnect |
-| `build_spine_leaf_fabric`  | Single-site spine-leaf fabric                    |
-| `build_hub_spoke`          | Hub-spoke (tenant fabric or WAN branch mode)     |
-| `build_security_stack`     | 5-tier security zone architecture                |
-| `build_diagram_from_model` | Build from YAML topology model file              |
+| Tool                       | Description                                        |
+|----------------------------|-----------------------------------------------------|
+| `build_multi_cluster`      | Rancher + multi-cluster K8s/OpenShift orchestration |
+| `build_multi_site`         | Multi-site spine-leaf with EVPN/DCI interconnect    |
+| `build_spine_leaf_fabric`  | Single-site spine-leaf fabric                       |
+| `build_hub_spoke`          | Hub-spoke (tenant fabric or WAN branch mode)        |
+| `build_security_stack`     | 5-tier security zone architecture                   |
+| `build_diagram_from_model` | Build from YAML topology model file                 |
 
 ### Node and Link Primitives
 
@@ -239,6 +267,15 @@ build_diagram_from_model(
 | `database_node`     | 4       | Database / persistence     |
 | `management_switch` | sidebar | Out-of-band management     |
 | `monitoring_node`   | sidebar | Monitoring / observability |
+| `rancher_server`    | −2      | Rancher management plane   |
+| `k8s_master`        | 0       | Kubernetes control plane   |
+| `k8s_etcd`          | 0       | Kubernetes etcd node       |
+| `openshift_master`  | 0       | OpenShift control plane    |
+| `openshift_infra_node` | 1    | OpenShift infra node       |
+| `ingress_controller`| 1       | Ingress controller         |
+| `k8s_worker`        | 2       | Kubernetes worker node     |
+| `openshift_worker`  | 2       | OpenShift worker node      |
+| `container_registry`| sidebar | Container image registry   |
 
 ---
 
@@ -283,6 +320,11 @@ build_diagram_from_model(
 | E012 | Error   | Unsupported interconnect type (multi_site)   |
 | E013 | Error   | Site declares zero spines (multi_site)       |
 | E014 | Error   | Site declares zero leafs (multi_site)        |
+| E015 | Error   | Unsupported cluster platform (multi_cluster) |
+| E016 | Error   | Cluster has zero control-plane nodes (multi_cluster) |
+| E017 | Error   | Cluster has zero worker nodes (multi_cluster) |
+| E018 | Error   | Duplicate cluster name (multi_cluster)       |
+| E019 | Error   | Unsupported workload type (multi_cluster)    |
 | W001 | Warning | topology not declared — defaulted            |
 | W002 | Warning | No sites declared                            |
 | W003 | Warning | No devices declared                          |
@@ -291,6 +333,8 @@ build_diagram_from_model(
 | W006 | Warning | hub_spoke topology_mode not declared         |
 | W007 | Warning | interconnect type not declared (multi_site)  |
 | W008 | Warning | Fewer than 2 sites declared (multi_site)     |
+| W009 | Warning | Rancher disabled with multiple clusters (multi_cluster) |
+| W010 | Warning | No clusters declared (multi_cluster)         |
 
 ---
 
@@ -343,22 +387,24 @@ Restart Claude Desktop after saving.
 
 ```
 drawio-mcp-server/
-├── server.py             MCP tool registration (19 tools)
+├── server.py             MCP tool registration (20 tools)
 ├── drawio.py             XML engine and topology builders
 ├── models.py             YAML topology model dataclasses
 ├── styles.py             Style profile resolver
-├── validators.py         Model validation (E001–E014, W001–W008)
+├── validators.py         Model validation (E001–E019, W001–W010)
 ├── requirements.txt      Runtime dependencies
 ├── requirements-dev.txt  Dev dependencies (pytest, ruff)
 ├── examples/
 │   ├── spine_leaf.yaml
-│   └── multi_site.yaml
+│   ├── multi_site.yaml
+│   └── multi_cluster.yaml
 └── tests/
     ├── test_drawio.py
     ├── test_models.py
     ├── test_styles.py
     ├── test_validators.py
-    └── test_multisite.py
+    ├── test_multisite.py
+    └── test_multicluster.py
 ```
 
 ---
@@ -373,6 +419,7 @@ drawio-mcp-server/
 | v1.3.0  | Containers, hub-spoke, security stack             |
 | v1.4.0  | 234-test suite, GitHub Actions CI, coverage gate  |
 | v1.5.0  | Multi-site EVPN/DCI builder, E011–E014, W007–W008 |
+| v1.6.0  | Multi-cluster Rancher/K8s/OpenShift, E015–E019, W009–W010 |
 
 ---
 
@@ -381,6 +428,7 @@ drawio-mcp-server/
 - Multi-page diagram support (logical / physical / traffic-flow views)
 - VDOM architecture builder
 - Additional topology examples
+- CI coverage gate raised to match new test count
 
 ---
 
